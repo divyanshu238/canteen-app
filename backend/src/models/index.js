@@ -26,17 +26,14 @@ const userSchema = new mongoose.Schema({
         minlength: [6, 'Password must be at least 6 characters'],
         select: false // Don't include by default in queries
     },
-    phone: {
-        type: String,
-        trim: true,
-        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit phone number'],
-        index: true
-    },
-    isPhoneVerified: {
+    // ============================================
+    // EMAIL VERIFICATION - NO PHONE FIELDS
+    // ============================================
+    isEmailVerified: {
         type: Boolean,
         default: false
     },
-    phoneVerifiedAt: {
+    emailVerifiedAt: {
         type: Date
     },
     role: {
@@ -53,7 +50,7 @@ const userSchema = new mongoose.Schema({
     },
     isApproved: {
         type: Boolean,
-        default: true // Partners need admin approval, students are auto-approved
+        default: true // Partners need approval, students are auto-approved
     },
     refreshToken: {
         type: String,
@@ -390,13 +387,16 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
 
 // =====================
-// OTP SCHEMA
+// OTP SCHEMA - EMAIL ONLY
 // =====================
 const otpSchema = new mongoose.Schema({
-    phone: {
+    // EMAIL is the ONLY identifier - NO phone field
+    email: {
         type: String,
-        required: [true, 'Phone number is required'],
-        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit phone number'],
+        required: [true, 'Email is required'],
+        lowercase: true,
+        trim: true,
+        match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email'],
         index: true
     },
     otpHash: {
@@ -445,8 +445,8 @@ const otpSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Compound indexes for efficient queries
-otpSchema.index({ phone: 1, purpose: 1, isUsed: 1 });
+// Compound indexes for efficient queries - EMAIL based
+otpSchema.index({ email: 1, purpose: 1, isUsed: 1 });
 otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-cleanup expired OTPs
 
 // Static method to generate OTP

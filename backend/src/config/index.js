@@ -1,6 +1,8 @@
 /**
  * Production-ready configuration
  * 
+ * EMAIL-ONLY OTP VERIFICATION SYSTEM
+ * 
  * NOTE: dotenv.config() is called in index.js BEFORE this module is imported.
  * Do NOT call dotenv.config() here - environment variables are already loaded.
  */
@@ -18,7 +20,9 @@ if (isProduction) {
         'RAZORPAY_KEY_SECRET',
         'RAZORPAY_WEBHOOK_SECRET',
         'FRONTEND_URL',
-        'REQUIRE_PHONE_VERIFICATION'  // MANDATORY in production
+        'REQUIRE_EMAIL_VERIFICATION',  // MANDATORY in production - EMAIL ONLY
+        'EMAIL_USER',                    // Required for OTP delivery
+        'EMAIL_PASS'                     // Required for OTP delivery
     );
 }
 
@@ -31,12 +35,26 @@ if (missingVars.length > 0) {
 }
 
 // ============================================
-// SECURITY: Strict validation of OTP config
+// SECURITY: Strict validation of EMAIL OTP config
 // ============================================
-const otpEnvValue = process.env.REQUIRE_PHONE_VERIFICATION;
-if (isProduction && otpEnvValue !== 'true' && otpEnvValue !== 'false') {
-    console.error('❌ FATAL: REQUIRE_PHONE_VERIFICATION must be exactly "true" or "false"');
-    console.error(`   Current value: "${otpEnvValue}" (type: ${typeof otpEnvValue})`);
+const emailOtpEnvValue = process.env.REQUIRE_EMAIL_VERIFICATION;
+if (isProduction && emailOtpEnvValue !== 'true' && emailOtpEnvValue !== 'false') {
+    console.error('❌ FATAL: REQUIRE_EMAIL_VERIFICATION must be exactly "true" or "false"');
+    console.error(`   Current value: "${emailOtpEnvValue}" (type: ${typeof emailOtpEnvValue})`);
+    process.exit(1);
+}
+
+// HARD FAIL: Reject any phone-based config in production
+if (isProduction && process.env.REQUIRE_PHONE_VERIFICATION) {
+    console.error('❌ FATAL: REQUIRE_PHONE_VERIFICATION is deprecated. Use REQUIRE_EMAIL_VERIFICATION instead.');
+    console.error('   Phone-based verification has been removed. Email is the ONLY verification method.');
+    process.exit(1);
+}
+
+// HARD FAIL: OTP delivery channel MUST be 'email' in production
+if (isProduction && process.env.OTP_DELIVERY_CHANNEL && process.env.OTP_DELIVERY_CHANNEL !== 'email') {
+    console.error('❌ FATAL: OTP_DELIVERY_CHANNEL must be "email" (or unset). SMS is not supported.');
+    console.error(`   Current value: "${process.env.OTP_DELIVERY_CHANNEL}"`);
     process.exit(1);
 }
 
@@ -72,18 +90,6 @@ export const config = {
         ? process.env.CORS_ORIGINS.split(',')
         : ['http://localhost:5173', 'http://localhost:5174'],
 
-    // SMS Provider Configuration
-    // Options: 'fast2sms', 'twilio', 'console' (for dev)
-    smsProvider: process.env.SMS_PROVIDER || 'console',
-
-    // Fast2SMS (India-focused provider)
-    fast2smsApiKey: process.env.FAST2SMS_API_KEY || '',
-
-    // Twilio (Global provider)
-    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
-    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-    twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
-
     // Email Configuration (for OTP delivery - FREE via Gmail SMTP)
     // How to get Gmail App Password:
     // 1. Enable 2FA on your Gmail account
@@ -93,24 +99,19 @@ export const config = {
     emailPass: process.env.EMAIL_PASS || '',
     emailFrom: process.env.EMAIL_FROM || '',
 
-    // OTP Delivery Channel: 'email' (default, free) or 'sms' (paid)
-    otpDeliveryChannel: process.env.OTP_DELIVERY_CHANNEL || 'email',
-
-    // OTP Configuration
+    // OTP Configuration - EMAIL ONLY
     otpLength: parseInt(process.env.OTP_LENGTH) || 6,
     otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES) || 5,
     otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS) || 5,
     otpResendCooldownSeconds: parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 60,
 
-    // Feature Flags (backward compatible - defaults to false)
-    // When false, existing users can login without phone verification
-    // When true, new registrations require phone verification
-    requirePhoneVerification: process.env.REQUIRE_PHONE_VERIFICATION === 'true',
-
-    // Grandfather date - users created before this date are exempt from phone verification
-    // Format: ISO date string (e.g., '2026-02-01T00:00:00Z')
-    // If not set, all existing users at time of deployment are grandfathered
-    phoneVerificationGrandfatherDate: process.env.PHONE_VERIFICATION_GRANDFATHER_DATE || null,
+    // ============================================
+    // EMAIL VERIFICATION - SINGLE SOURCE OF TRUTH
+    // ============================================
+    // When true: ALL users MUST verify email via OTP before getting tokens
+    // When false: Email verification is NOT required (development mode)
+    // There is NO phone verification. NO SMS. NO fallbacks.
+    requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === 'true',
 };
 
 // Log config (without secrets) in development
@@ -122,6 +123,8 @@ if (!isProduction) {
         mongoUri: config.mongoUri ? config.mongoUri.replace(/\/\/.*@/, '//***@') : '(not set)',
         jwtExpiresIn: config.jwtExpiresIn,
         razorpayConfigured: !!config.razorpayKeyId,
+        requireEmailVerification: config.requireEmailVerification,
+        emailConfigured: !!(config.emailUser && config.emailPass),
     });
 }
 

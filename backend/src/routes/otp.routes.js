@@ -1,8 +1,10 @@
 /**
- * OTP Routes
+ * OTP Routes - EMAIL ONLY
  * 
- * Phone verification via OTP
+ * Email verification via OTP
  * All routes are prefixed with /api/otp
+ * 
+ * ZERO phone references. All OTP operations use email.
  */
 
 import { Router } from 'express';
@@ -12,14 +14,14 @@ import { validate } from '../middleware/validate.js';
 
 const router = Router();
 
-// Validation schemas for OTP operations
+// Validation schemas for OTP operations - EMAIL ONLY
 const otpSchemas = {
     sendOTP: {
-        phone: {
+        email: {
             required: true,
             type: 'string',
-            minLength: 10,
-            maxLength: 10
+            minLength: 5,
+            maxLength: 255
         },
         purpose: {
             type: 'string',
@@ -27,11 +29,11 @@ const otpSchemas = {
         }
     },
     verifyOTP: {
-        phone: {
+        email: {
             required: true,
             type: 'string',
-            minLength: 10,
-            maxLength: 10
+            minLength: 5,
+            maxLength: 255
         },
         otp: {
             required: true,
@@ -48,23 +50,24 @@ const otpSchemas = {
 
 /**
  * @route   POST /api/otp/send
- * @desc    Send OTP to phone number
+ * @desc    Send OTP to email address
  * @access  Public (for registration) / Private (for login/password_reset)
  * 
  * Request Body:
  * {
- *   "phone": "1234567890",      // Required: 10-digit Indian mobile number
- *   "purpose": "registration"   // Optional: 'registration' | 'login' | 'password_reset'
+ *   "email": "user@example.com",   // Required: valid email address
+ *   "purpose": "registration"       // Optional: 'registration' | 'login' | 'password_reset'
  * }
  * 
  * Response:
  * {
  *   "success": true,
- *   "message": "Verification code sent successfully",
+ *   "message": "Verification code sent to us***@example.com",
  *   "data": {
- *     "phone": "123****890",
+ *     "emailMasked": "us***@example.com",
  *     "expiresInMinutes": 5,
- *     "purpose": "registration"
+ *     "purpose": "registration",
+ *     "verificationType": "email"
  *   }
  * }
  */
@@ -76,24 +79,28 @@ router.post('/send',
 
 /**
  * @route   POST /api/otp/verify
- * @desc    Verify OTP and mark phone as verified
+ * @desc    Verify OTP and mark email as verified, issue tokens
  * @access  Public (for registration) / Private (for login/password_reset)
  * 
  * Request Body:
  * {
- *   "phone": "1234567890",      // Required: 10-digit mobile number
- *   "otp": "123456",            // Required: 6-digit OTP
- *   "purpose": "registration"   // Optional: purpose of verification
+ *   "email": "user@example.com",   // Required: email address
+ *   "otp": "123456",               // Required: 6-digit OTP
+ *   "purpose": "registration"       // Optional: purpose of verification
  * }
  * 
- * Response:
+ * Response (success):
  * {
  *   "success": true,
- *   "message": "Phone number verified successfully",
+ *   "message": "Email verified successfully. You are now logged in.",
  *   "data": {
- *     "phone": "123****890",
+ *     "emailMasked": "us***@example.com",
  *     "verified": true,
- *     "verificationToken": "..." // Only for registration (to use during signup)
+ *     "verificationType": "email",
+ *     "user": { ... },
+ *     "accessToken": "...",
+ *     "refreshToken": "...",
+ *     "loginComplete": true
  *   }
  * }
  */
@@ -122,18 +129,18 @@ router.post('/resend',
 
 /**
  * @route   GET /api/otp/status
- * @desc    Get phone verification status for current user
+ * @desc    Get email verification status for current user
  * @access  Private
  * 
  * Response:
  * {
  *   "success": true,
  *   "data": {
- *     "phone": "123****890",
- *     "hasPhone": true,
+ *     "emailMasked": "us***@example.com",
  *     "isVerified": false,
+ *     "verifiedAt": null,
  *     "requiresVerification": true,
- *     "isGrandfathered": false
+ *     "verificationType": "email"
  *   }
  * }
  */

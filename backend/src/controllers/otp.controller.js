@@ -1,81 +1,65 @@
 /**
- * OTP Controller
+ * OTP Controller - EMAIL-ONLY VERIFICATION
  * 
- * Handles OTP verification via Email (default, free) or SMS (optional, paid):
- * - New user registration (optional, controlled by feature flag)
- * - Resend OTP functionality
- * - OTP verification
+ * ALL OTP operations use EMAIL as the primary identifier.
  * 
- * Delivery Channel:
- * - email (default) - FREE via Gmail SMTP
- * - sms (optional) - Paid via Fast2SMS/Twilio
+ * ZERO phone logic. ZERO SMS. ZERO fallbacks.
  * 
- * Backward Compatible:
- * - Feature flagged via REQUIRE_PHONE_VERIFICATION
- * - Existing users are grandfathered
- * - Phone field remains optional for existing workflows
+ * FLOWS:
+ * - Send OTP: Require email → Generate OTP → Send via email
+ * - Verify OTP: Validate email + OTP → Mark user as verified → Issue tokens
+ * - Resend OTP: Rate-limited resend functionality
+ * - Status: Check verification status
  */
 
 import config from '../config/index.js';
 import { User, OTP } from '../models/index.js';
-import { deliverOTP, getDeliveryMessage, getMaskedDestination, OTP_CHANNELS } from '../services/otp.service.js';
-import { isUserGrandfathered, validateVerificationToken } from '../utils/auth.utils.js';
+import { sendOTPEmail } from '../services/email.service.js';
+import { maskEmail } from '../utils/auth.utils.js';
 
 /**
- * Send OTP for phone verification (during or after registration)
+ * Send OTP for email verification
  * POST /api/otp/send
  * 
- * Body: { phone: "1234567890", purpose?: "registration" | "login" | "password_reset" }
- * Auth: Optional (required for login/password_reset purpose)
+ * Body: { email: "user@example.com", purpose?: "registration" | "login" | "password_reset" }
  */
 export const sendVerificationOTP = async (req, res, next) => {
     try {
-        const { phone, purpose = 'registration' } = req.body;
+        const { email, purpose = 'registration' } = req.body;
 
-        // Validate phone number
-        if (!phone || !/^[0-9]{10}$/.test(phone)) {
+        // Validate email
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({
                 success: false,
-                error: 'Please provide a valid 10-digit phone number'
+                error: 'Please provide a valid email address'
             });
         }
 
-        // For login/password_reset, user must be authenticated
-        if (['login', 'password_reset'].includes(purpose)) {
-            if (!req.user) {
-                return res.status(401).json({
-                    success: false,
-                    error: 'Authentication required for this operation'
-                });
-            }
+        const normalizedEmail = email.toLowerCase().trim();
 
-            // Verify phone matches user's phone
-            if (req.user.phone !== phone) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Phone number does not match your account'
-                });
-            }
+        // Find user by email
+        const user = await User.findOne({ email: normalizedEmail });
+
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                error: 'No account found with this email address',
+                code: 'USER_NOT_FOUND'
+            });
         }
 
-        // Check if phone is already verified by another user (for registration)
-        if (purpose === 'registration') {
-            const existingUserWithPhone = await User.findOne({
-                phone,
-                isPhoneVerified: true
+        // If already verified and purpose is registration, inform user
+        if (user.isEmailVerified && purpose === 'registration') {
+            return res.status(400).json({
+                success: false,
+                error: 'This email is already verified. Please login.',
+                code: 'ALREADY_VERIFIED'
             });
-
-            if (existingUserWithPhone) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'This phone number is already registered and verified'
-                });
-            }
         }
 
         // Check for existing active OTP (rate limiting)
         const existingOTP = await OTP.findOne({
-            phone,
+            email: normalizedEmail,
             purpose,
             isUsed: false,
             expiresAt: { $gt: new Date() }
@@ -101,7 +85,7 @@ export const sendVerificationOTP = async (req, res, next) => {
         const otpCode = OTP.generateOTP(config.otpLength);
         const otpHash = await OTP.hashOTP(otpCode);
 
-        console.log(`🔐 OTP GENERATED for phone ${phone.slice(0, 3)}****${phone.slice(-3)} (purpose: ${purpose})`);
+        console.log(`🔐 OTP GENERATED for ${maskEmail(normalizedEmail)} (purpose: ${purpose})`);
 
         // Create or update OTP record
         if (existingOTP) {
@@ -111,73 +95,48 @@ export const sendVerificationOTP = async (req, res, next) => {
             await existingOTP.save();
             console.log(`📝 OTP record UPDATED (resend #${existingOTP.resendCount})`);
         } else {
-            // Invalidate any old OTPs for this phone/purpose
+            // Invalidate any old OTPs for this email/purpose
             await OTP.updateMany(
-                { phone, purpose, isUsed: false },
+                { email: normalizedEmail, purpose, isUsed: false },
                 { isUsed: true }
             );
 
             // Create new OTP record
             await OTP.create({
-                phone,
+                email: normalizedEmail,
                 otpHash,
                 purpose,
-                userId: req.user?._id,
+                userId: user._id,
                 expiresAt: new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000),
                 maxAttempts: config.otpMaxAttempts
             });
             console.log(`📝 OTP record CREATED`);
         }
 
-        // Get user email for delivery (email is default, free channel)
-        let userEmail = null;
-        if (req.user?.email) {
-            userEmail = req.user.email;
-        } else {
-            // Try to find user by phone to get their email
-            const existingUser = await User.findOne({ phone });
-            userEmail = existingUser?.email;
-        }
+        // Send OTP via email
+        console.log(`📤 SENDING OTP EMAIL to ${maskEmail(normalizedEmail)}`);
+        const emailResult = await sendOTPEmail(normalizedEmail, otpCode, purpose);
 
-        // Deliver OTP via configured channel (email by default)
-        console.log(`📤 DELIVERING OTP via ${config.otpDeliveryChannel || 'email'} channel`);
-        console.log(`   Email: ${userEmail ? userEmail.slice(0, 3) + '***' + userEmail.slice(userEmail.indexOf('@')) : 'NOT AVAILABLE'}`);
-        console.log(`   Phone: ${phone.slice(0, 3)}****${phone.slice(-3)}`);
-
-        const deliveryResult = await deliverOTP({
-            email: userEmail,
-            phone,
-            otp: otpCode,
-            purpose
-        });
-
-        if (!deliveryResult.success) {
-            console.error(`❌ OTP DELIVERY FAILED: ${deliveryResult.error}`);
-            console.error(`   Channel: ${deliveryResult.channel}`);
+        if (!emailResult.success) {
+            console.error(`❌ OTP EMAIL FAILED: ${emailResult.error}`);
             return res.status(500).json({
                 success: false,
-                error: 'Failed to send verification code. Please try again.'
+                error: 'Failed to send verification email. Please try again.'
             });
         }
 
-        console.log(`✅ OTP DELIVERED successfully`);
-        console.log(`   Channel: ${deliveryResult.channel}`);
-        console.log(`   Destination: ${deliveryResult.destination || 'N/A'}`);
-        console.log(`   MessageId: ${deliveryResult.messageId || 'N/A'}`);
-
-        // Build response with channel information
-        const destination = deliveryResult.destination || (deliveryResult.channel === OTP_CHANNELS.EMAIL ? userEmail : phone);
-        const message = getDeliveryMessage(deliveryResult.channel, destination);
-        const maskedDestination = getMaskedDestination(deliveryResult.channel, destination);
+        console.log(`✅ OTP EMAIL SENT to ${maskEmail(normalizedEmail)}`);
+        console.log(`   MessageId: ${emailResult.messageId || 'N/A'}`);
 
         res.status(200).json({
             success: true,
-            message,
+            message: `Verification code sent to ${maskEmail(normalizedEmail)}`,
             data: {
-                channel: deliveryResult.channel,
-                destination: maskedDestination,
+                email: normalizedEmail,
+                emailMasked: maskEmail(normalizedEmail),
                 expiresInMinutes: config.otpExpiryMinutes,
                 purpose,
+                verificationType: 'email',
                 // Include OTP in development for testing
                 ...(config.isProduction ? {} : { otp: otpCode })
             }
@@ -192,21 +151,21 @@ export const sendVerificationOTP = async (req, res, next) => {
  * Verify OTP
  * POST /api/otp/verify
  * 
- * Body: { phone: "1234567890", otp: "123456", purpose?: "registration" }
- * Auth: Optional (depends on purpose)
+ * Body: { email: "user@example.com", otp: "123456", purpose?: "registration" }
  * 
- * IMPORTANT: After successful verification, this endpoint issues JWT tokens
- * to complete the login flow for users who were blocked at login.
+ * IMPORTANT: After successful verification, this endpoint:
+ * 1. Marks user as email verified
+ * 2. Issues JWT tokens (completing the auth flow)
  */
 export const verifyOTP = async (req, res, next) => {
     try {
-        const { phone, otp, purpose = 'registration' } = req.body;
+        const { email, otp, purpose = 'registration' } = req.body;
 
         // Validate inputs
-        if (!phone || !/^[0-9]{10}$/.test(phone)) {
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({
                 success: false,
-                error: 'Please provide a valid 10-digit phone number'
+                error: 'Please provide a valid email address'
             });
         }
 
@@ -217,9 +176,11 @@ export const verifyOTP = async (req, res, next) => {
             });
         }
 
+        const normalizedEmail = email.toLowerCase().trim();
+
         // Find the OTP record
         const otpRecord = await OTP.findOne({
-            phone,
+            email: normalizedEmail,
             purpose,
             isUsed: false,
             expiresAt: { $gt: new Date() }
@@ -246,67 +207,49 @@ export const verifyOTP = async (req, res, next) => {
         }
 
         // ============================================
-        // OTP verified successfully - update user
+        // OTP VERIFIED - Update user and issue tokens
         // ============================================
 
         // Import token generation utilities
         const { generateTokens, formatUserResponse } = await import('./auth.controller.js');
 
-        let user = null;
-        let tokens = null;
-        let verificationToken = null;
+        // Find user by email
+        const user = await User.findOne({ email: normalizedEmail });
 
-        // Find user by phone
-        user = await User.findOne({ phone });
-
-        if (user) {
-            // Update verification status
-            user.isPhoneVerified = true;
-            user.phoneVerifiedAt = new Date();
-            await user.save();
-
-            // ============================================
-            // ISSUE TOKENS: Complete the login flow
-            // ============================================
-            tokens = await generateTokens(user);
-        } else if (purpose === 'registration') {
-            // No user exists yet - create a temporary verification token
-            // This token proves phone ownership for registration
-            verificationToken = Buffer.from(JSON.stringify({
-                phone,
-                purpose,
-                verifiedAt: new Date().toISOString(),
-                expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 min validity
-            })).toString('base64');
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                error: 'User not found',
+                code: 'USER_NOT_FOUND'
+            });
         }
 
-        // Build response
-        const responseData = {
-            phone: phone.slice(0, 3) + '****' + phone.slice(-3),
-            verified: true,
-            purpose
-        };
+        // Mark email as verified
+        user.isEmailVerified = true;
+        user.emailVerifiedAt = new Date();
+        await user.save();
 
-        // Include tokens if user exists (login flow completed)
-        if (user && tokens) {
-            responseData.user = formatUserResponse(user);
-            responseData.accessToken = tokens.accessToken;
-            responseData.refreshToken = tokens.refreshToken;
-            responseData.loginComplete = true;
-        }
+        console.log(`✅ EMAIL VERIFIED for ${maskEmail(normalizedEmail)}`);
 
-        // Include verification token for registration flow
-        if (verificationToken) {
-            responseData.verificationToken = verificationToken;
-            responseData.loginComplete = false;
-        }
+        // Generate and issue tokens
+        const tokens = await generateTokens(user);
+
+        console.log(`🔑 TOKENS ISSUED for ${maskEmail(normalizedEmail)}`);
 
         res.status(200).json({
             success: true,
-            message: user
-                ? 'Phone verified successfully. You are now logged in.'
-                : 'Phone number verified successfully.',
-            data: responseData
+            message: 'Email verified successfully. You are now logged in.',
+            data: {
+                email: normalizedEmail,
+                emailMasked: maskEmail(normalizedEmail),
+                verified: true,
+                purpose,
+                verificationType: 'email',
+                user: formatUserResponse(user),
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                loginComplete: true
+            }
         });
 
     } catch (error) {
@@ -318,10 +261,9 @@ export const verifyOTP = async (req, res, next) => {
  * Resend OTP (alias for sendVerificationOTP with rate limiting)
  * POST /api/otp/resend
  * 
- * Body: { phone: "1234567890", purpose?: "registration" }
+ * Body: { email: "user@example.com", purpose?: "registration" }
  */
 export const resendOTP = async (req, res, next) => {
-    // Same as send, but with stricter rate limiting message
     return sendVerificationOTP(req, res, next);
 };
 
@@ -342,18 +284,15 @@ export const getVerificationStatus = async (req, res, next) => {
 
         const user = await User.findById(req.user._id);
 
-        // Check if user is grandfathered
-        const grandfathered = isUserGrandfathered(user);
-
         res.status(200).json({
             success: true,
             data: {
-                phone: user.phone ? user.phone.slice(0, 3) + '****' + user.phone.slice(-3) : null,
-                hasPhone: !!user.phone,
-                isVerified: user.isPhoneVerified,
-                verifiedAt: user.phoneVerifiedAt,
-                requiresVerification: config.requirePhoneVerification && !grandfathered && !user.isPhoneVerified,
-                isGrandfathered: grandfathered
+                email: user.email,
+                emailMasked: maskEmail(user.email),
+                isVerified: user.isEmailVerified,
+                verifiedAt: user.emailVerifiedAt,
+                requiresVerification: config.requireEmailVerification && !user.isEmailVerified,
+                verificationType: 'email'
             }
         });
 

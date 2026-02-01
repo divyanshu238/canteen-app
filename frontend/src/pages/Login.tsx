@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { login } from '../store';
 import { authAPI } from '../api';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, ChefHat, GraduationCap, Phone } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, ChefHat, GraduationCap } from 'lucide-react';
 
 type AuthMode = 'login' | 'register';
 type Role = 'student' | 'partner';
@@ -15,7 +15,6 @@ export const Login = () => {
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -36,38 +35,35 @@ export const Login = () => {
                 if (!name.trim()) {
                     throw new Error('Please enter your name');
                 }
+                if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    throw new Error('Please enter a valid email address');
+                }
                 if (password.length < 6) {
                     throw new Error('Password must be at least 6 characters');
-                }
-                // Phone is REQUIRED for OTP verification - must be exactly 10 digits
-                if (!phone || !/^[0-9]{10}$/.test(phone)) {
-                    throw new Error('Please enter a valid 10-digit phone number. Phone verification is required.');
                 }
 
                 response = await authAPI.register({
                     name: name.trim(),
                     email: email.trim().toLowerCase(),
                     password,
-                    role,
-                    phone // ALWAYS include phone - required for OTP flow
+                    role
                 });
 
-                // Check if OTP verification is required (no tokens in response)
-                // Handle both new flag (requiresOtp) and old flag (requiresPhoneVerification)
-                if (response.data.requiresOtp || response.data.requiresPhoneVerification) {
+                // Check if EMAIL OTP verification is required (no tokens in response)
+                if (response.data.requiresOtp) {
                     // Store verification context in sessionStorage for persistence
                     const verificationData = {
-                        phone: response.data.data.phone,
-                        phoneMasked: response.data.data.phoneMasked,
                         email: response.data.data.email,
+                        emailMasked: response.data.data.emailMasked,
                         name: response.data.data.name,
                         userId: response.data.data.userId,
-                        source: 'register' as const
+                        source: 'register' as const,
+                        verificationType: 'email' as const
                     };
                     sessionStorage.setItem('pendingVerification', JSON.stringify(verificationData));
 
-                    // Redirect to OTP verification
-                    navigate('/verify-phone', { state: verificationData });
+                    // Redirect to EMAIL OTP verification
+                    navigate('/verify-email', { state: verificationData });
                     return;
                 }
             } else {
@@ -85,7 +81,6 @@ export const Login = () => {
                     name: user.name,
                     email: user.email,
                     role: user.role,
-                    phone: user.phone,
                     canteenId: user.canteenId,
                     isApproved: user.isApproved
                 },
@@ -104,26 +99,24 @@ export const Login = () => {
         } catch (err: any) {
             const errorResponse = err.response?.data;
 
-            // Check for OTP verification required (403)
-            // Handle both old code (PHONE_VERIFICATION_REQUIRED) and new code (OTP_REQUIRED)
+            // Check for EMAIL OTP verification required (403)
             const isOtpRequired = err.response?.status === 403 &&
-                (errorResponse?.code === 'OTP_REQUIRED' ||
-                    errorResponse?.code === 'PHONE_VERIFICATION_REQUIRED' ||
+                (errorResponse?.code === 'EMAIL_OTP_REQUIRED' ||
                     errorResponse?.requiresOtp === true);
 
             if (isOtpRequired) {
                 // Store verification context in sessionStorage for persistence
                 const verificationData = {
-                    phone: errorResponse.data.phone,
-                    phoneMasked: errorResponse.data.phoneMasked,
                     email: errorResponse.data.email,
+                    emailMasked: errorResponse.data.emailMasked,
                     userId: errorResponse.data.userId,
-                    source: 'login' as const
+                    source: 'login' as const,
+                    verificationType: 'email' as const
                 };
                 sessionStorage.setItem('pendingVerification', JSON.stringify(verificationData));
 
-                // Redirect to OTP verification
-                navigate('/verify-phone', { state: verificationData });
+                // Redirect to EMAIL OTP verification
+                navigate('/verify-email', { state: verificationData });
                 return;
             }
 
@@ -253,6 +246,7 @@ export const Login = () => {
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">
                                     Email Address
+                                    {mode === 'register' && <span className="text-red-500 ml-1">*</span>}
                                 </label>
                                 <div className="relative">
                                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -265,32 +259,12 @@ export const Login = () => {
                                         required
                                     />
                                 </div>
-                            </div>
-
-                            {/* Phone (Register only) - REQUIRED for OTP verification */}
-                            {mode === 'register' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                                        Phone Number
-                                        <span className="text-red-500 ml-1">*</span>
-                                    </label>
-                                    <div className="relative">
-                                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                                        <input
-                                            type="tel"
-                                            value={phone}
-                                            onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                                            className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                            placeholder="10-digit mobile number"
-                                            maxLength={10}
-                                            required
-                                        />
-                                    </div>
+                                {mode === 'register' && (
                                     <p className="text-xs text-orange-600 mt-1 font-medium">
-                                        Required for account verification via OTP
+                                        A verification code will be sent to this email
                                     </p>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             {/* Password */}
                             <div>

@@ -1,9 +1,25 @@
+/**
+ * Authentication Controller - EMAIL-ONLY OTP VERIFICATION
+ * 
+ * SECURITY-CRITICAL: All token issuance paths use mustVerifyEmailOtp()
+ * 
+ * RULES (ZERO EXCEPTIONS):
+ * 1. Register: Create user → Send OTP email → NO tokens
+ * 2. Login: Check email verified → If not → 403 EMAIL_OTP_REQUIRED → NO tokens
+ * 3. Refresh: Check email verified → If not → 403 EMAIL_OTP_REQUIRED → Revoke tokens
+ * 4. Password Change: Check email verified → If not → Block
+ * 5. ONLY after OTP verification → issue tokens
+ * 
+ * ZERO phone references. ZERO SMS. ZERO fallbacks.
+ */
+
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import { User, RefreshToken, Canteen, OTP } from '../models/index.js';
 import { AppError } from '../middleware/error.js';
-import { validateVerificationToken, mustVerifyOtp, formatOtpRequiredResponse } from '../utils/auth.utils.js';
+import { mustVerifyEmailOtp, formatEmailOtpRequiredResponse, maskEmail } from '../utils/auth.utils.js';
+import { sendOTPEmail } from '../services/email.service.js';
 
 /**
  * Generate JWT tokens
@@ -48,43 +64,33 @@ export const formatUserResponse = (user) => ({
     name: user.name,
     email: user.email,
     role: user.role,
-    phone: user.phone,
     canteenId: user.canteenId?.toString(),
     isApproved: user.isApproved,
-    isPhoneVerified: user.isPhoneVerified,
-    phoneVerifiedAt: user.phoneVerifiedAt,
+    isEmailVerified: user.isEmailVerified,
+    emailVerifiedAt: user.emailVerifiedAt,
     createdAt: user.createdAt
 });
 
 /**
  * Register new user
  * POST /api/auth/register
+ * 
+ * FLOW:
+ * 1. Create user (isEmailVerified = false)
+ * 2. Generate OTP
+ * 3. Send OTP to email
+ * 4. Return success with requiresOtp: true
+ * 5. DO NOT issue any tokens
  */
 export const register = async (req, res, next) => {
     try {
-        const { name, email, password, phone, role = 'student', verificationToken } = req.body;
+        const { name, email, password, role = 'student' } = req.body;
 
-        // ============================================
-        // SECURITY: Fail loudly if phone is required but missing
-        // This prevents silent registration that can't complete OTP flow
-        // ============================================
-        if (config.requirePhoneVerification && !phone) {
-            console.error('❌ REGISTRATION BLOCKED: Phone number required but not provided');
-            console.error(`   Email: ${email}`);
-            console.error(`   REQUIRE_PHONE_VERIFICATION: ${config.requirePhoneVerification}`);
+        // Validate required fields
+        if (!name || !email || !password) {
             return res.status(400).json({
                 success: false,
-                error: 'Phone number is required for registration. Please provide a valid 10-digit phone number.',
-                code: 'PHONE_REQUIRED'
-            });
-        }
-
-        // Validate phone format if provided
-        if (phone && !/^[0-9]{10}$/.test(phone)) {
-            return res.status(400).json({
-                success: false,
-                error: 'Please provide a valid 10-digit phone number',
-                code: 'INVALID_PHONE_FORMAT'
+                error: 'Name, email, and password are required'
             });
         }
 
@@ -97,49 +103,18 @@ export const register = async (req, res, next) => {
             });
         }
 
-        // Check phone verification if feature is enabled and phone is provided
-        let isPhoneVerified = false;
-        let phoneVerifiedAt = null;
-
-        if (phone && config.requirePhoneVerification) {
-            // Check if phone is already registered
-            const existingPhoneUser = await User.findOne({ phone, isPhoneVerified: true });
-            if (existingPhoneUser) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'This phone number is already registered'
-                });
-            }
-
-            // Validate verification token if provided
-            if (verificationToken) {
-                const tokenResult = validateVerificationToken(verificationToken);
-                if (tokenResult.valid && tokenResult.phone === phone) {
-                    isPhoneVerified = true;
-                    phoneVerifiedAt = new Date(tokenResult.verifiedAt);
-                } else {
-                    return res.status(400).json({
-                        success: false,
-                        error: tokenResult.error || 'Phone verification required'
-                    });
-                }
-            }
-            // If no token and verification is required, we'll create user but flag as unverified
-        }
-
-        // Create user
+        // Create user - ALWAYS unverified initially
         const userData = {
             name: name.trim(),
             email: email.toLowerCase().trim(),
             password,
-            phone,
             role: ['student', 'partner'].includes(role) ? role : 'student',
             isApproved: role !== 'partner', // Partners need approval
-            isPhoneVerified,
-            phoneVerifiedAt
+            isEmailVerified: false  // ALWAYS false on registration
         };
 
         const user = await User.create(userData);
+        console.log(`✅ User created: ${maskEmail(user.email)} (ID: ${user._id})`);
 
         // If partner, create a placeholder canteen
         if (role === 'partner') {
@@ -157,30 +132,63 @@ export const register = async (req, res, next) => {
         }
 
         // ============================================
-        // SECURITY: Use single source of truth for OTP check
+        // SEND OTP EMAIL (if email verification is enabled)
         // ============================================
-        const otpCheck = mustVerifyOtp(user, 'register');
+        if (config.requireEmailVerification) {
+            // Generate OTP
+            const otpCode = OTP.generateOTP(config.otpLength);
+            const otpHash = await OTP.hashOTP(otpCode);
 
-        if (!otpCheck.canIssueTokens) {
-            // Account created but NO tokens issued until phone verified
-            console.log(`🔒 REGISTER BLOCKED: ${otpCheck.reason}`);
+            console.log(`🔐 OTP GENERATED for ${maskEmail(user.email)} (purpose: registration)`);
+
+            // Invalidate any old OTPs for this email
+            await OTP.updateMany(
+                { email: user.email, purpose: 'registration', isUsed: false },
+                { isUsed: true }
+            );
+
+            // Create new OTP record
+            await OTP.create({
+                email: user.email,
+                otpHash,
+                purpose: 'registration',
+                userId: user._id,
+                expiresAt: new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000),
+                maxAttempts: config.otpMaxAttempts
+            });
+
+            // Send OTP via email
+            console.log(`📤 SENDING OTP EMAIL to ${maskEmail(user.email)}`);
+            const emailResult = await sendOTPEmail(user.email, otpCode, 'registration');
+
+            if (!emailResult.success) {
+                console.error(`❌ OTP EMAIL FAILED: ${emailResult.error}`);
+                // Don't fail registration, but log the error
+                // User can request resend from the verify page
+            } else {
+                console.log(`✅ OTP EMAIL SENT to ${maskEmail(user.email)}`);
+            }
+
+            // Return success but NO TOKENS
             return res.status(201).json({
                 success: true,
                 requiresOtp: true,
-                message: 'Account created. Please verify your phone number to continue.',
+                verificationType: 'email',
+                message: 'Account created. Please check your email for the verification code.',
                 data: {
                     userId: user._id.toString(),
-                    phone: user.phone || null,
-                    phoneMasked: user.phone ? user.phone.slice(0, 3) + '****' + user.phone.slice(-3) : null,
                     email: user.email,
+                    emailMasked: maskEmail(user.email),
                     name: user.name
                 }
             });
         }
 
         // ============================================
-        // SUCCESS: User verified (or OTP disabled) - issue tokens
+        // EMAIL VERIFICATION DISABLED - Issue tokens directly
+        // This should NOT happen in production
         // ============================================
+        console.warn('⚠️ WARNING: Email verification is DISABLED. Issuing tokens without verification.');
         const tokens = await generateTokens(user);
 
         res.status(201).json({
@@ -198,6 +206,12 @@ export const register = async (req, res, next) => {
 /**
  * Login user
  * POST /api/auth/login
+ * 
+ * FLOW:
+ * 1. Validate credentials
+ * 2. Check mustVerifyEmailOtp()
+ * 3. If not verified → 403 EMAIL_OTP_REQUIRED → NO tokens
+ * 4. If verified → Issue tokens
  */
 export const login = async (req, res, next) => {
     try {
@@ -230,14 +244,14 @@ export const login = async (req, res, next) => {
         }
 
         // ============================================
-        // SECURITY: Use single source of truth for OTP check
+        // SECURITY: Single source of truth for OTP check
         // ============================================
-        const otpCheck = mustVerifyOtp(user, 'login');
+        const otpCheck = mustVerifyEmailOtp(user, 'login');
 
         if (!otpCheck.canIssueTokens) {
-            // DO NOT issue tokens - user must verify phone first
+            // DO NOT issue tokens - user must verify email first
             console.log(`🔒 LOGIN BLOCKED: ${otpCheck.reason}`);
-            return res.status(403).json(formatOtpRequiredResponse(user));
+            return res.status(403).json(formatEmailOtpRequiredResponse(user));
         }
 
         // ============================================
@@ -260,6 +274,9 @@ export const login = async (req, res, next) => {
 /**
  * Refresh access token
  * POST /api/auth/refresh
+ * 
+ * SECURITY: Also checks email verification status
+ * If user's email is not verified, revoke all tokens and require OTP
  */
 export const refreshToken = async (req, res, next) => {
     try {
@@ -308,9 +325,9 @@ export const refreshToken = async (req, res, next) => {
         }
 
         // ============================================
-        // SECURITY: Use single source of truth for OTP check
+        // SECURITY: Single source of truth for OTP check
         // ============================================
-        const otpCheck = mustVerifyOtp(user, 'refresh');
+        const otpCheck = mustVerifyEmailOtp(user, 'refresh');
 
         if (!otpCheck.canIssueTokens) {
             // Revoke ALL tokens for this user - they must verify OTP
@@ -320,7 +337,7 @@ export const refreshToken = async (req, res, next) => {
                 { isRevoked: true }
             );
 
-            return res.status(403).json(formatOtpRequiredResponse(user));
+            return res.status(403).json(formatEmailOtpRequiredResponse(user));
         }
 
         // Revoke old refresh token
@@ -398,11 +415,10 @@ export const getMe = async (req, res, next) => {
  */
 export const updateProfile = async (req, res, next) => {
     try {
-        const { name, phone } = req.body;
+        const { name } = req.body;
 
         const updates = {};
         if (name) updates.name = name.trim();
-        if (phone) updates.phone = phone;
 
         const user = await User.findByIdAndUpdate(
             req.user._id,
@@ -422,6 +438,8 @@ export const updateProfile = async (req, res, next) => {
 /**
  * Change password
  * PUT /api/auth/password
+ * 
+ * SECURITY: Also checks email verification status
  */
 export const changePassword = async (req, res, next) => {
     try {
@@ -466,19 +484,20 @@ export const changePassword = async (req, res, next) => {
         // ============================================
         // SECURITY: Check OTP before issuing new tokens
         // ============================================
-        const otpCheck = mustVerifyOtp(user, 'password_change');
+        const otpCheck = mustVerifyEmailOtp(user, 'password_change');
 
         if (!otpCheck.canIssueTokens) {
             // Password changed but NO tokens - user must verify OTP
             console.log(`🔒 PASSWORD CHANGE - TOKENS BLOCKED: ${otpCheck.reason}`);
             return res.status(200).json({
                 success: true,
-                message: 'Password changed. Please verify your phone to continue.',
+                message: 'Password changed. Please verify your email to continue.',
                 requiresOtp: true,
+                verificationType: 'email',
                 data: {
                     userId: user._id.toString(),
-                    phone: user.phone || null,
-                    email: user.email
+                    email: user.email,
+                    emailMasked: maskEmail(user.email)
                 }
             });
         }

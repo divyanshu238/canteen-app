@@ -1,167 +1,79 @@
 /**
- * OTP Delivery Service
+ * OTP Delivery Service - EMAIL ONLY
  * 
- * Unified abstraction for OTP delivery across channels:
- * - email (DEFAULT - FREE via Gmail SMTP)
- * - sms (optional - paid via Fast2SMS/Twilio)
+ * This service ONLY delivers OTPs via email.
  * 
- * The channel is determined by:
- * 1. OTP_DELIVERY_CHANNEL env var (default: 'email')
- * 2. Explicit channel parameter
- * 3. Fallback logic based on user data availability
+ * ZERO phone logic. ZERO SMS. ZERO fallbacks.
+ * 
+ * Email is delivered via:
+ * - Nodemailer + Gmail SMTP (FREE forever)
  */
 
-import config from '../config/index.js';
 import { sendOTPEmail } from './email.service.js';
-import { sendOTP as sendOTPSMS } from './sms.service.js';
-
-export const OTP_CHANNELS = {
-    EMAIL: 'email',
-    SMS: 'sms'
-};
+import { maskEmail } from '../utils/auth.utils.js';
 
 /**
- * Send OTP via configured channel
+ * Send OTP via Email
+ * 
+ * This is the ONLY OTP delivery method.
  * 
  * @param {Object} params - OTP parameters
- * @param {string} params.email - User's email address
- * @param {string} params.phone - User's phone number (optional for SMS fallback)
+ * @param {string} params.email - User's email address (REQUIRED)
  * @param {string} params.otp - OTP code to send
  * @param {string} params.purpose - Purpose of OTP
- * @param {string} params.channel - Override channel ('email' | 'sms')
- * @returns {Promise<{success: boolean, channel: string, messageId?: string, error?: string}>}
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string}>}
  */
-export const deliverOTP = async ({ email, phone, otp, purpose = 'verification', channel = null }) => {
-    // Determine channel: explicit > config > default (email)
-    const selectedChannel = channel || config.otpDeliveryChannel || OTP_CHANNELS.EMAIL;
-
-    console.log(`📤 Delivering OTP via ${selectedChannel.toUpperCase()} for ${purpose}...`);
+export const deliverOTP = async ({ email, otp, purpose = 'verification' }) => {
+    // Validate email
+    if (!email) {
+        console.error('❌ OTP DELIVERY FAILED: Email is required');
+        return {
+            success: false,
+            error: 'Email address is required for OTP delivery'
+        };
+    }
 
     // Validate OTP
     if (!otp || otp.length !== 6) {
+        console.error('❌ OTP DELIVERY FAILED: Invalid OTP format');
         return {
             success: false,
-            channel: selectedChannel,
             error: 'Invalid OTP format'
         };
     }
 
-    // Route to appropriate service based on channel
-    if (selectedChannel === OTP_CHANNELS.SMS) {
-        // SMS delivery
-        if (!phone) {
-            return {
-                success: false,
-                channel: selectedChannel,
-                error: 'Phone number required for SMS delivery'
-            };
-        }
+    console.log(`📤 DELIVERING OTP via EMAIL to ${maskEmail(email)} (purpose: ${purpose})`);
 
-        const result = await sendOTPSMS(phone, otp, purpose);
-        return {
-            ...result,
-            channel: OTP_CHANNELS.SMS,
-            destination: phone
-        };
-    }
-
-    // Default: Email delivery
-    if (!email) {
-        // If email not available, try SMS as fallback (if phone exists and SMS is configured)
-        if (phone && config.smsProvider && config.smsProvider !== 'console') {
-            console.log('⚠️ Email not available, falling back to SMS');
-            const result = await sendOTPSMS(phone, otp, purpose);
-            return {
-                ...result,
-                channel: OTP_CHANNELS.SMS,
-                destination: phone
-            };
-        }
-
-        // If in development, log to console anyway
-        if (!config.isProduction) {
-            console.log('\n' + '='.repeat(50));
-            console.log('📧 OTP (No Email Available - Development Mode)');
-            console.log('='.repeat(50));
-            console.log(`Phone: ${phone || 'N/A'}`);
-            console.log(`OTP: ${otp}`);
-            console.log(`Purpose: ${purpose}`);
-            console.log('='.repeat(50) + '\n');
-
-            return {
-                success: true,
-                messageId: `dev_fallback_${Date.now()}`,
-                channel: 'console',
-                destination: phone || 'console'
-            };
-        }
-
-        return {
-            success: false,
-            channel: selectedChannel,
-            error: 'Email address required for OTP delivery'
-        };
-    }
-
-    // Send via email
+    // Send via email - the ONLY delivery method
     const result = await sendOTPEmail(email, otp, purpose);
+
+    if (result.success) {
+        console.log(`✅ OTP DELIVERED to ${maskEmail(email)}`);
+        console.log(`   MessageId: ${result.messageId || 'N/A'}`);
+    } else {
+        console.error(`❌ OTP DELIVERY FAILED: ${result.error}`);
+    }
+
     return {
         ...result,
-        channel: OTP_CHANNELS.EMAIL,
-        destination: email
+        email: email,
+        emailMasked: maskEmail(email)
     };
 };
 
 /**
  * Get user-friendly message for OTP delivery
- * @param {string} channel - Delivery channel used
- * @param {string} destination - Email or phone
+ * @param {string} email - Email address
  * @returns {string} User-friendly message
  */
-export const getDeliveryMessage = (channel, destination) => {
-    if (!destination) {
+export const getDeliveryMessage = (email) => {
+    if (!email) {
         return 'Verification code sent';
     }
-
-    if (channel === OTP_CHANNELS.SMS) {
-        const masked = destination.slice(0, 3) + '****' + destination.slice(-3);
-        return `Verification code sent to +91 ${masked}`;
-    }
-
-    // Email masking: jo***@gmail.com
-    if (destination.includes('@')) {
-        const [localPart, domain] = destination.split('@');
-        const masked = localPart.slice(0, 2) + '***@' + domain;
-        return `Verification code sent to ${masked}`;
-    }
-
-    return 'Verification code sent';
-};
-
-/**
- * Get masked destination for response
- * @param {string} channel - Delivery channel
- * @param {string} destination - Email or phone
- * @returns {string} Masked destination
- */
-export const getMaskedDestination = (channel, destination) => {
-    if (!destination) return '';
-
-    if (channel === OTP_CHANNELS.SMS) {
-        return destination.slice(0, 3) + '****' + destination.slice(-3);
-    }
-
-    if (destination.includes('@')) {
-        const [localPart, domain] = destination.split('@');
-        return localPart.slice(0, 2) + '***@' + domain;
-    }
-
-    return destination;
+    return `Verification code sent to ${maskEmail(email)}`;
 };
 
 export default {
     deliverOTP,
-    getDeliveryMessage,
-    getMaskedDestination,
-    OTP_CHANNELS
+    getDeliveryMessage
 };

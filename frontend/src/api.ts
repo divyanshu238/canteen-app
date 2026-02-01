@@ -59,16 +59,16 @@ api.interceptors.response.use(
                         // Store verification context and redirect
                         const data = refreshError.response.data.data;
                         sessionStorage.setItem('pendingVerification', JSON.stringify({
-                            phone: data?.phone,
-                            phoneMasked: data?.phoneMasked,
                             email: data?.email,
+                            emailMasked: data?.emailMasked,
                             userId: data?.userId,
-                            source: 'session'
+                            source: 'session',
+                            verificationType: 'email'
                         }));
                         localStorage.removeItem('token');
                         localStorage.removeItem('refreshToken');
                         localStorage.removeItem('user');
-                        window.location.href = '/verify-phone';
+                        window.location.href = '/verify-email';
                         return Promise.reject(refreshError);
                     }
 
@@ -93,7 +93,7 @@ api.interceptors.response.use(
 
 // Auth API
 export const authAPI = {
-    register: (data: { name: string; email: string; password: string; role?: string; phone?: string }) =>
+    register: (data: { name: string; email: string; password: string; role?: string }) =>
         api.post('/auth/register', data),
 
     login: (data: { email: string; password: string }) =>
@@ -115,15 +115,15 @@ export const authAPI = {
         api.put('/auth/password', data),
 };
 
-// OTP API
+// OTP API - EMAIL ONLY
 export const otpAPI = {
-    send: (data: { phone: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
+    send: (data: { email: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
         api.post('/otp/send', data),
 
-    verify: (data: { phone: string; otp: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
+    verify: (data: { email: string; otp: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
         api.post('/otp/verify', data),
 
-    resend: (data: { phone: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
+    resend: (data: { email: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
         api.post('/otp/resend', data),
 
     getStatus: () =>
