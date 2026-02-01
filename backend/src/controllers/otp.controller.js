@@ -155,6 +155,9 @@ export const sendVerificationOTP = async (req, res, next) => {
  * 
  * Body: { phone: "1234567890", otp: "123456", purpose?: "registration" }
  * Auth: Optional (depends on purpose)
+ * 
+ * IMPORTANT: After successful verification, this endpoint issues JWT tokens
+ * to complete the login flow for users who were blocked at login.
  */
 export const verifyOTP = async (req, res, next) => {
     try {
@@ -186,7 +189,8 @@ export const verifyOTP = async (req, res, next) => {
         if (!otpRecord) {
             return res.status(400).json({
                 success: false,
-                error: 'No valid OTP found. Please request a new verification code.'
+                error: 'No valid OTP found. Please request a new verification code.',
+                code: 'OTP_NOT_FOUND'
             });
         }
 
@@ -197,54 +201,73 @@ export const verifyOTP = async (req, res, next) => {
             return res.status(400).json({
                 success: false,
                 error: verifyResult.error,
+                code: 'OTP_INVALID',
                 attemptsRemaining: verifyResult.attemptsRemaining
             });
         }
 
-        // OTP verified successfully - update user if exists
+        // ============================================
+        // OTP verified successfully - update user
+        // ============================================
+
+        // Import token generation utilities
+        const { generateTokens, formatUserResponse } = await import('./auth.controller.js');
+
         let user = null;
+        let tokens = null;
         let verificationToken = null;
 
-        if (purpose === 'registration') {
-            // For registration, we might have a pending user or need to associate later
-            user = await User.findOne({ phone });
+        // Find user by phone
+        user = await User.findOne({ phone });
 
-            if (user) {
-                user.isPhoneVerified = true;
-                user.phoneVerifiedAt = new Date();
-                await user.save();
-            } else {
-                // Create a temporary verification token for registration flow
-                // This token proves phone ownership and can be used during user creation
-                verificationToken = Buffer.from(JSON.stringify({
-                    phone,
-                    purpose,
-                    verifiedAt: new Date().toISOString(),
-                    expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 min validity
-                })).toString('base64');
-            }
-        } else if (req.user) {
-            // For authenticated users (login, password_reset)
-            user = await User.findById(req.user._id);
-            if (user && user.phone === phone) {
-                user.isPhoneVerified = true;
-                user.phoneVerifiedAt = new Date();
-                await user.save();
-            }
+        if (user) {
+            // Update verification status
+            user.isPhoneVerified = true;
+            user.phoneVerifiedAt = new Date();
+            await user.save();
+
+            // ============================================
+            // ISSUE TOKENS: Complete the login flow
+            // ============================================
+            tokens = await generateTokens(user);
+        } else if (purpose === 'registration') {
+            // No user exists yet - create a temporary verification token
+            // This token proves phone ownership for registration
+            verificationToken = Buffer.from(JSON.stringify({
+                phone,
+                purpose,
+                verifiedAt: new Date().toISOString(),
+                expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 min validity
+            })).toString('base64');
+        }
+
+        // Build response
+        const responseData = {
+            phone: phone.slice(0, 3) + '****' + phone.slice(-3),
+            verified: true,
+            purpose
+        };
+
+        // Include tokens if user exists (login flow completed)
+        if (user && tokens) {
+            responseData.user = formatUserResponse(user);
+            responseData.accessToken = tokens.accessToken;
+            responseData.refreshToken = tokens.refreshToken;
+            responseData.loginComplete = true;
+        }
+
+        // Include verification token for registration flow
+        if (verificationToken) {
+            responseData.verificationToken = verificationToken;
+            responseData.loginComplete = false;
         }
 
         res.status(200).json({
             success: true,
-            message: 'Phone number verified successfully',
-            data: {
-                phone: phone.slice(0, 3) + '****' + phone.slice(-3),
-                verified: true,
-                purpose,
-                // Include token for registration flow
-                ...(verificationToken ? { verificationToken } : {}),
-                // Include user info if available
-                ...(user ? { userId: user._id.toString() } : {})
-            }
+            message: user
+                ? 'Phone verified successfully. You are now logged in.'
+                : 'Phone number verified successfully.',
+            data: responseData
         });
 
     } catch (error) {

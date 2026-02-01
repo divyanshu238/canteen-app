@@ -7,8 +7,9 @@ import { validateVerificationToken, isUserGrandfathered } from '../utils/auth.ut
 
 /**
  * Generate JWT tokens
+ * Exported for use in OTP flow after verification
  */
-const generateTokens = async (user) => {
+export const generateTokens = async (user) => {
     const accessToken = jwt.sign(
         {
             id: user._id,
@@ -40,8 +41,9 @@ const generateTokens = async (user) => {
 
 /**
  * Format user response
+ * Exported for use in OTP flow after verification
  */
-const formatUserResponse = (user) => ({
+export const formatUserResponse = (user) => ({
     id: user._id.toString(),
     name: user.name,
     email: user.email,
@@ -130,23 +132,40 @@ export const register = async (req, res, next) => {
             await user.save();
         }
 
-        // Generate tokens
-        const tokens = await generateTokens(user);
-
         // Determine if verification is required for this user
         const requiresVerification = config.requirePhoneVerification &&
             phone &&
             !isPhoneVerified;
 
+        // ============================================
+        // ENFORCEMENT: Block full access if OTP required
+        // ============================================
+        if (requiresVerification) {
+            // Account created but NO tokens issued until phone verified
+            return res.status(201).json({
+                success: true,
+                requiresPhoneVerification: true,
+                message: 'Account created. Please verify your phone number to continue.',
+                data: {
+                    userId: user._id.toString(),
+                    phone: user.phone,
+                    phoneMasked: user.phone.slice(0, 3) + '****' + user.phone.slice(-3),
+                    email: user.email,
+                    name: user.name
+                }
+            });
+        }
+
+        // ============================================
+        // SUCCESS: No verification required - issue tokens
+        // ============================================
+        const tokens = await generateTokens(user);
+
         res.status(201).json({
             success: true,
             data: {
                 user: formatUserResponse(user),
-                ...tokens,
-                requiresPhoneVerification: requiresVerification,
-                message: requiresVerification
-                    ? 'Account created. Please verify your phone number to access all features.'
-                    : undefined
+                ...tokens
             }
         });
     } catch (error) {
@@ -195,7 +214,28 @@ export const login = async (req, res, next) => {
             !user.isPhoneVerified &&
             !grandfathered;
 
-        // Generate tokens
+        // ============================================
+        // ENFORCEMENT: Block login if OTP not verified
+        // ============================================
+        if (requiresVerification) {
+            // DO NOT issue tokens - user must verify phone first
+            return res.status(403).json({
+                success: false,
+                error: 'Phone verification required',
+                code: 'PHONE_VERIFICATION_REQUIRED',
+                requiresPhoneVerification: true,
+                data: {
+                    userId: user._id.toString(),
+                    phone: user.phone,
+                    phoneMasked: user.phone.slice(0, 3) + '****' + user.phone.slice(-3),
+                    email: user.email
+                }
+            });
+        }
+
+        // ============================================
+        // SUCCESS: User is verified or grandfathered
+        // ============================================
         const tokens = await generateTokens(user);
 
         res.json({
@@ -203,11 +243,7 @@ export const login = async (req, res, next) => {
             data: {
                 user: formatUserResponse(user),
                 ...tokens,
-                requiresPhoneVerification: requiresVerification,
-                isGrandfathered: grandfathered,
-                message: requiresVerification
-                    ? 'Please verify your phone number to continue.'
-                    : undefined
+                isGrandfathered: grandfathered
             }
         });
     } catch (error) {
@@ -425,5 +461,7 @@ export default {
     logout,
     getMe,
     updateProfile,
-    changePassword
+    changePassword,
+    generateTokens,
+    formatUserResponse
 };

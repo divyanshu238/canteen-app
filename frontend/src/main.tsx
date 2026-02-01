@@ -10,6 +10,7 @@ import { CanteenMenu } from './pages/CanteenMenu';
 import { Cart } from './pages/Cart';
 import { OrderTracking } from './pages/OrderTracking';
 import { Login } from './pages/Login';
+import { OTPVerification } from './pages/OTPVerification';
 import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import './index.css';
@@ -47,6 +48,7 @@ ReactDOM.createRoot(rootElement).render(
                         <Route path="/canteen/:id" element={<CanteenMenu />} />
                         <Route path="/cart" element={<Cart />} />
                         <Route path="/login" element={<Login />} />
+                        <Route path="/verify-phone" element={<OTPVerification />} />
 
                         {/* Protected Routes */}
                         <Route path="/order/:id" element={

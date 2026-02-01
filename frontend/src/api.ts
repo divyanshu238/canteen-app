@@ -93,6 +93,21 @@ export const authAPI = {
         api.put('/auth/password', data),
 };
 
+// OTP API
+export const otpAPI = {
+    send: (data: { phone: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
+        api.post('/otp/send', data),
+
+    verify: (data: { phone: string; otp: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
+        api.post('/otp/verify', data),
+
+    resend: (data: { phone: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
+        api.post('/otp/resend', data),
+
+    getStatus: () =>
+        api.get('/otp/status'),
+};
+
 // Canteen API
 export const canteenAPI = {
     getAll: () =>

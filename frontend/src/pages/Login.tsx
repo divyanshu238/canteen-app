@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { login } from '../store';
 import { authAPI } from '../api';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, ChefHat, GraduationCap } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, ChefHat, GraduationCap, Phone } from 'lucide-react';
 
 type AuthMode = 'login' | 'register';
 type Role = 'student' | 'partner';
@@ -15,6 +15,7 @@ export const Login = () => {
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -38,13 +39,34 @@ export const Login = () => {
                 if (password.length < 6) {
                     throw new Error('Password must be at least 6 characters');
                 }
+                // Phone is optional but if provided must be 10 digits
+                if (phone && !/^[0-9]{10}$/.test(phone)) {
+                    throw new Error('Please enter a valid 10-digit phone number');
+                }
 
                 response = await authAPI.register({
                     name: name.trim(),
                     email: email.trim().toLowerCase(),
                     password,
-                    role
-                });
+                    role,
+                    ...(phone ? { phone } : {})
+                } as any);
+
+                // Check if phone verification is required (no tokens in response)
+                if (response.data.requiresPhoneVerification) {
+                    // Redirect to OTP verification
+                    navigate('/verify-phone', {
+                        state: {
+                            phone: response.data.data.phone,
+                            phoneMasked: response.data.data.phoneMasked,
+                            email: response.data.data.email,
+                            name: response.data.data.name,
+                            userId: response.data.data.userId,
+                            source: 'register'
+                        }
+                    });
+                    return;
+                }
             } else {
                 response = await authAPI.login({
                     email: email.trim().toLowerCase(),
@@ -77,7 +99,24 @@ export const Login = () => {
                 navigate('/');
             }
         } catch (err: any) {
-            const errorMessage = err.response?.data?.error || err.message || 'Authentication failed';
+            const errorResponse = err.response?.data;
+
+            // Check for phone verification required (403)
+            if (err.response?.status === 403 && errorResponse?.code === 'PHONE_VERIFICATION_REQUIRED') {
+                // Redirect to OTP verification
+                navigate('/verify-phone', {
+                    state: {
+                        phone: errorResponse.data.phone,
+                        phoneMasked: errorResponse.data.phoneMasked,
+                        email: errorResponse.data.email,
+                        userId: errorResponse.data.userId,
+                        source: 'login'
+                    }
+                });
+                return;
+            }
+
+            const errorMessage = errorResponse?.error || err.message || 'Authentication failed';
             setError(errorMessage);
         } finally {
             setIsLoading(false);
@@ -155,8 +194,8 @@ export const Login = () => {
                                         type="button"
                                         onClick={() => setRole('student')}
                                         className={`p-4 rounded-xl border-2 transition-all ${role === 'student'
-                                                ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         <GraduationCap className="mx-auto mb-2" size={24} />
@@ -166,8 +205,8 @@ export const Login = () => {
                                         type="button"
                                         onClick={() => setRole('partner')}
                                         className={`p-4 rounded-xl border-2 transition-all ${role === 'partner'
-                                                ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                                : 'border-gray-200 hover:border-gray-300'
+                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
+                                            : 'border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         <ChefHat className="mx-auto mb-2" size={24} />
@@ -216,6 +255,30 @@ export const Login = () => {
                                     />
                                 </div>
                             </div>
+
+                            {/* Phone (Register only) */}
+                            {mode === 'register' && (
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                                        Phone Number
+                                        <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                        <input
+                                            type="tel"
+                                            value={phone}
+                                            onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                            className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                                            placeholder="10-digit mobile number"
+                                            maxLength={10}
+                                        />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        For order updates & account security
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Password */}
                             <div>
