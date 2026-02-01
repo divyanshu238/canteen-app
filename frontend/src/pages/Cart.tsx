@@ -54,6 +54,15 @@ export const Cart = () => {
             throw new Error('Failed to load payment gateway. Please try again.');
         }
 
+        // CRITICAL: Store the MongoDB _id before opening Razorpay
+        // This is the backend orderId (NOT the Razorpay order ID)
+        const backendOrderId = orderData.order._id;
+
+        // Safety check: Ensure we have the MongoDB order ID
+        if (!backendOrderId) {
+            throw new Error('Order creation failed. Missing order ID. Please try again.');
+        }
+
         return new Promise((resolve, reject) => {
             const options = {
                 key: orderData.payment.keyId,
@@ -65,13 +74,14 @@ export const Cart = () => {
                 handler: async (response: any) => {
                     try {
                         // Verify payment on server
+                        // IMPORTANT: orderId here is the MongoDB _id, NOT razorpay_order_id
                         await orderAPI.verifyPayment({
                             razorpay_order_id: response.razorpay_order_id,
                             razorpay_payment_id: response.razorpay_payment_id,
                             razorpay_signature: response.razorpay_signature,
-                            orderId: orderData.order._id
+                            orderId: backendOrderId  // Use the captured MongoDB _id
                         });
-                        resolve(orderData.order._id);
+                        resolve(backendOrderId);
                     } catch (err) {
                         reject(new Error('Payment verification failed'));
                     }
@@ -137,6 +147,11 @@ export const Cart = () => {
             });
 
             const { order, payment, isDevMode } = response.data.data;
+
+            // Validate that we received the order with its MongoDB _id
+            if (!order || !order._id) {
+                throw new Error('Order creation failed. Please try again.');
+            }
 
             let orderId: string;
 
