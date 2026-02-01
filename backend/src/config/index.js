@@ -17,7 +17,8 @@ if (isProduction) {
         'RAZORPAY_KEY_ID',
         'RAZORPAY_KEY_SECRET',
         'RAZORPAY_WEBHOOK_SECRET',
-        'FRONTEND_URL'
+        'FRONTEND_URL',
+        'REQUIRE_PHONE_VERIFICATION'  // MANDATORY in production
     );
 }
 
@@ -26,6 +27,16 @@ const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 if (missingVars.length > 0) {
     console.error('❌ FATAL: Missing required environment variables:');
     missingVars.forEach(v => console.error(`   - ${v}`));
+    process.exit(1);
+}
+
+// ============================================
+// SECURITY: Strict validation of OTP config
+// ============================================
+const otpEnvValue = process.env.REQUIRE_PHONE_VERIFICATION;
+if (isProduction && otpEnvValue !== 'true' && otpEnvValue !== 'false') {
+    console.error('❌ FATAL: REQUIRE_PHONE_VERIFICATION must be exactly "true" or "false"');
+    console.error(`   Current value: "${otpEnvValue}" (type: ${typeof otpEnvValue})`);
     process.exit(1);
 }
 

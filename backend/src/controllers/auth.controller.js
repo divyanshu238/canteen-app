@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
 import { User, RefreshToken, Canteen, OTP } from '../models/index.js';
 import { AppError } from '../middleware/error.js';
-import { validateVerificationToken, isUserGrandfathered } from '../utils/auth.utils.js';
+import { validateVerificationToken, mustVerifyOtp, formatOtpRequiredResponse } from '../utils/auth.utils.js';
 
 /**
  * Generate JWT tokens
@@ -132,25 +132,22 @@ export const register = async (req, res, next) => {
             await user.save();
         }
 
-        // Determine if verification is required for this user
-        const requiresVerification = config.requirePhoneVerification &&
-            phone &&
-            !isPhoneVerified;
+        // ============================================
+        // SECURITY: Use single source of truth for OTP check
+        // ============================================
+        const otpCheck = mustVerifyOtp(user, 'register');
 
-        // ============================================
-        // ENFORCEMENT: Block full access if OTP required
-        // ============================================
-        if (requiresVerification) {
+        if (!otpCheck.canIssueTokens) {
             // Account created but NO tokens issued until phone verified
+            console.log(`🔒 REGISTER BLOCKED: ${otpCheck.reason}`);
             return res.status(201).json({
                 success: true,
                 requiresOtp: true,
-                requiresPhoneVerification: true, // backward compat
                 message: 'Account created. Please verify your phone number to continue.',
                 data: {
                     userId: user._id.toString(),
-                    phone: user.phone,
-                    phoneMasked: user.phone.slice(0, 3) + '****' + user.phone.slice(-3),
+                    phone: user.phone || null,
+                    phoneMasked: user.phone ? user.phone.slice(0, 3) + '****' + user.phone.slice(-3) : null,
                     email: user.email,
                     name: user.name
                 }
@@ -158,7 +155,7 @@ export const register = async (req, res, next) => {
         }
 
         // ============================================
-        // SUCCESS: No verification required - issue tokens
+        // SUCCESS: User verified (or OTP disabled) - issue tokens
         // ============================================
         const tokens = await generateTokens(user);
 
@@ -208,35 +205,19 @@ export const login = async (req, res, next) => {
             });
         }
 
-        // Check phone verification (with grandfathering)
-        const grandfathered = isUserGrandfathered(user);
-        const requiresVerification = config.requirePhoneVerification &&
-            user.phone &&
-            !user.isPhoneVerified &&
-            !grandfathered;
+        // ============================================
+        // SECURITY: Use single source of truth for OTP check
+        // ============================================
+        const otpCheck = mustVerifyOtp(user, 'login');
 
-        // ============================================
-        // ENFORCEMENT: Block login if OTP not verified
-        // ============================================
-        if (requiresVerification) {
+        if (!otpCheck.canIssueTokens) {
             // DO NOT issue tokens - user must verify phone first
-            return res.status(403).json({
-                success: false,
-                error: 'Phone verification required',
-                code: 'OTP_REQUIRED',
-                requiresOtp: true,
-                requiresPhoneVerification: true, // backward compat
-                data: {
-                    userId: user._id.toString(),
-                    phone: user.phone,
-                    phoneMasked: user.phone.slice(0, 3) + '****' + user.phone.slice(-3),
-                    email: user.email
-                }
-            });
+            console.log(`🔒 LOGIN BLOCKED: ${otpCheck.reason}`);
+            return res.status(403).json(formatOtpRequiredResponse(user));
         }
 
         // ============================================
-        // SUCCESS: User is verified or grandfathered
+        // SUCCESS: User is verified - issue tokens
         // ============================================
         const tokens = await generateTokens(user);
 
@@ -244,8 +225,7 @@ export const login = async (req, res, next) => {
             success: true,
             data: {
                 user: formatUserResponse(user),
-                ...tokens,
-                isGrandfathered: grandfathered
+                ...tokens
             }
         });
     } catch (error) {
@@ -304,38 +284,26 @@ export const refreshToken = async (req, res, next) => {
         }
 
         // ============================================
-        // SECURITY: Block token refresh if OTP not verified
+        // SECURITY: Use single source of truth for OTP check
         // ============================================
-        const grandfathered = isUserGrandfathered(user);
-        const requiresVerification = config.requirePhoneVerification &&
-            user.phone &&
-            !user.isPhoneVerified &&
-            !grandfathered;
+        const otpCheck = mustVerifyOtp(user, 'refresh');
 
-        if (requiresVerification) {
-            // Revoke the token - user must verify OTP first
-            storedToken.isRevoked = true;
-            await storedToken.save();
+        if (!otpCheck.canIssueTokens) {
+            // Revoke ALL tokens for this user - they must verify OTP
+            console.log(`🔒 REFRESH BLOCKED: ${otpCheck.reason}`);
+            await RefreshToken.updateMany(
+                { userId: user._id },
+                { isRevoked: true }
+            );
 
-            return res.status(403).json({
-                success: false,
-                error: 'Phone verification required',
-                code: 'OTP_REQUIRED',
-                requiresOtp: true,
-                data: {
-                    userId: user._id.toString(),
-                    phone: user.phone,
-                    phoneMasked: user.phone.slice(0, 3) + '****' + user.phone.slice(-3),
-                    email: user.email
-                }
-            });
+            return res.status(403).json(formatOtpRequiredResponse(user));
         }
 
         // Revoke old refresh token
         storedToken.isRevoked = true;
         await storedToken.save();
 
-        // Generate new tokens (only for verified/grandfathered users)
+        // Generate new tokens (only for verified users)
         const tokens = await generateTokens(user);
 
         res.json({
@@ -471,7 +439,27 @@ export const changePassword = async (req, res, next) => {
             { isRevoked: true }
         );
 
-        // Generate new tokens
+        // ============================================
+        // SECURITY: Check OTP before issuing new tokens
+        // ============================================
+        const otpCheck = mustVerifyOtp(user, 'password_change');
+
+        if (!otpCheck.canIssueTokens) {
+            // Password changed but NO tokens - user must verify OTP
+            console.log(`🔒 PASSWORD CHANGE - TOKENS BLOCKED: ${otpCheck.reason}`);
+            return res.status(200).json({
+                success: true,
+                message: 'Password changed. Please verify your phone to continue.',
+                requiresOtp: true,
+                data: {
+                    userId: user._id.toString(),
+                    phone: user.phone || null,
+                    email: user.email
+                }
+            });
+        }
+
+        // Generate new tokens (only for verified users)
         const tokens = await generateTokens(user);
 
         res.json({

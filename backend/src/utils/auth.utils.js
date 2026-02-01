@@ -1,45 +1,83 @@
 /**
  * Authentication Utilities
  * 
- * Shared utilities for authentication and verification logic.
- * Separated to avoid circular dependencies.
+ * SECURITY-CRITICAL: Single source of truth for OTP verification logic.
+ * 
+ * RULES (ZERO EXCEPTIONS):
+ * 1. If REQUIRE_PHONE_VERIFICATION === 'true', OTP is MANDATORY
+ * 2. No grandfathering. No legacy exceptions.
+ * 3. Every token issuance MUST pass through mustVerifyOtp()
  */
 
 import config from '../config/index.js';
 
 /**
- * Check if user is grandfathered (exempt from phone verification)
+ * SINGLE SOURCE OF TRUTH for OTP verification requirement
  * 
- * Grandfathering logic:
- * 1. If feature is disabled, everyone is "grandfathered"
- * 2. If user is already verified, they're not grandfathered (just verified)
- * 3. If grandfather date is set, users created before that date are exempt
- * 4. Otherwise, existing users (created before feature deployment) are exempt
+ * Call this BEFORE issuing ANY tokens (access or refresh).
  * 
- * @param {Object} user - User document
- * @returns {boolean} - True if user is exempt from phone verification
+ * @param {Object} user - User document (must have phone and isPhoneVerified)
+ * @param {string} context - Where check is happening: 'register'|'login'|'refresh'|'password_change'
+ * @returns {{
+ *   required: boolean,      // TRUE if OTP is required
+ *   verified: boolean,      // TRUE if user is already verified
+ *   canIssueTokens: boolean,// TRUE if safe to issue tokens
+ *   reason: string          // Human-readable reason
+ * }}
  */
-export const isUserGrandfathered = (user) => {
-    // If feature is disabled, everyone is "grandfathered"
+export const mustVerifyOtp = (user, context = 'unknown') => {
+    // HARD CHECK: Is OTP enforcement enabled?
     if (!config.requirePhoneVerification) {
-        return true;
+        return {
+            required: false,
+            verified: true,
+            canIssueTokens: true,
+            reason: 'OTP enforcement disabled in config'
+        };
     }
 
-    // If already verified, not grandfathered but verified
-    if (user.isPhoneVerified) {
+    // User has no phone - they MUST add one to proceed
+    if (!user.phone) {
+        return {
+            required: true,
+            verified: false,
+            canIssueTokens: false,
+            reason: 'Phone number required for verification'
+        };
+    }
+
+    // User has phone - check if verified
+    if (user.isPhoneVerified === true) {
+        return {
+            required: false,
+            verified: true,
+            canIssueTokens: true,
+            reason: 'Phone is verified'
+        };
+    }
+
+    // User has phone but NOT verified - BLOCK
+    return {
+        required: true,
+        verified: false,
+        canIssueTokens: false,
+        reason: `OTP verification required (context: ${context})`
+    };
+};
+
+/**
+ * DEPRECATED: Use mustVerifyOtp() instead
+ * Kept for backward compatibility but now returns FALSE always if OTP is enabled
+ */
+export const isUserGrandfathered = (user) => {
+    console.warn('⚠️ DEPRECATED: isUserGrandfathered() called. Use mustVerifyOtp() instead.');
+
+    // If OTP is required, NO ONE is grandfathered
+    if (config.requirePhoneVerification) {
         return false;
     }
 
-    // If grandfather date is set, check against it
-    if (config.phoneVerificationGrandfatherDate) {
-        const grandfatherDate = new Date(config.phoneVerificationGrandfatherDate);
-        return user.createdAt < grandfatherDate;
-    }
-
-    // If no grandfather date, check if user was created before feature was enabled
-    // Users without phoneVerifiedAt who have isPhoneVerified: false are grandfathered
-    // This works because the field didn't exist before
-    return !user.isPhoneVerified && !user.phoneVerifiedAt && user.createdAt < new Date();
+    return true; // Only if feature is disabled
 };
 
 /**
@@ -69,7 +107,26 @@ export const validateVerificationToken = (token) => {
     }
 };
 
+/**
+ * Format OTP required response (for 403 responses)
+ */
+export const formatOtpRequiredResponse = (user) => ({
+    success: false,
+    error: 'Phone verification required',
+    code: 'OTP_REQUIRED',
+    requiresOtp: true,
+    data: {
+        userId: user._id?.toString() || user.id,
+        phone: user.phone || null,
+        phoneMasked: user.phone ? user.phone.slice(0, 3) + '****' + user.phone.slice(-3) : null,
+        email: user.email
+    }
+});
+
 export default {
+    mustVerifyOtp,
     isUserGrandfathered,
-    validateVerificationToken
+    validateVerificationToken,
+    formatOtpRequiredResponse
 };
+
