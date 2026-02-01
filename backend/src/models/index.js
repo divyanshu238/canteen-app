@@ -249,11 +249,19 @@ const orderItemSchema = new mongoose.Schema({
     }
 }, { _id: false });
 
+// Helper function to generate unique order ID
+const generateOrderId = () => {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+    return `ORD-${timestamp}-${random}`;
+};
+
 const orderSchema = new mongoose.Schema({
     orderId: {
         type: String,
         unique: true,
-        required: true
+        required: true,
+        default: generateOrderId  // Auto-generate before validation
     },
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -339,16 +347,6 @@ orderSchema.index({ canteenId: 1, status: 1, createdAt: -1 });
 orderSchema.index({ razorpayOrderId: 1 });
 orderSchema.index({ orderId: 1 });
 orderSchema.index({ status: 1, paymentStatus: 1 });
-
-// Generate unique order ID
-orderSchema.pre('save', async function (next) {
-    if (this.isNew && !this.orderId) {
-        const timestamp = Date.now().toString(36).toUpperCase();
-        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-        this.orderId = `ORD-${timestamp}-${random}`;
-    }
-    next();
-});
 
 export const Order = mongoose.model('Order', orderSchema);
 
