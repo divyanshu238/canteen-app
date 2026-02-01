@@ -11,15 +11,8 @@ export const setupRoutes = (app) => {
     app.use('/api/partner', partnerRoutes);
     app.use('/api/admin', adminRoutes);
 
-    // Health check
-    app.get('/api/health', (req, res) => {
-        res.json({
-            success: true,
-            message: 'API is running',
-            timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV || 'development'
-        });
-    });
+    // Note: /api/health is defined in index.js BEFORE rate limiting middleware
+    // to ensure it always responds with 200 for Render health checks
 };
 
 export default {

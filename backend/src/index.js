@@ -49,7 +49,21 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false
 }));
 
-// Rate limiting
+// =====================
+// HEALTH CHECK ENDPOINT - MUST BE BEFORE RATE LIMITER
+// This endpoint is polled frequently by Render for health monitoring.
+// It MUST bypass rate limiting to prevent false-positive downtime alerts.
+// =====================
+app.get('/api/health', (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'API is running',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development'
+    });
+});
+
+// Rate limiting - Applied to all /api/ routes EXCEPT /api/health (defined above)
 const limiter = rateLimit({
     windowMs: config.rateLimitWindowMs,
     max: config.rateLimitMax,
