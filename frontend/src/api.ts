@@ -49,7 +49,29 @@ api.interceptors.response.use(
                         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
                         return api(originalRequest);
                     }
-                } catch (refreshError) {
+                } catch (refreshError: any) {
+                    // Check if refresh was blocked due to OTP requirement
+                    const isOtpRequired = refreshError.response?.status === 403 &&
+                        (refreshError.response?.data?.code === 'OTP_REQUIRED' ||
+                            refreshError.response?.data?.requiresOtp === true);
+
+                    if (isOtpRequired) {
+                        // Store verification context and redirect
+                        const data = refreshError.response.data.data;
+                        sessionStorage.setItem('pendingVerification', JSON.stringify({
+                            phone: data?.phone,
+                            phoneMasked: data?.phoneMasked,
+                            email: data?.email,
+                            userId: data?.userId,
+                            source: 'session'
+                        }));
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('refreshToken');
+                        localStorage.removeItem('user');
+                        window.location.href = '/verify-phone';
+                        return Promise.reject(refreshError);
+                    }
+
                     // Refresh failed, logout user
                     localStorage.removeItem('token');
                     localStorage.removeItem('refreshToken');

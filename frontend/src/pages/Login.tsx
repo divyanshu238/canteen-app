@@ -52,19 +52,22 @@ export const Login = () => {
                     ...(phone ? { phone } : {})
                 } as any);
 
-                // Check if phone verification is required (no tokens in response)
-                if (response.data.requiresPhoneVerification) {
+                // Check if OTP verification is required (no tokens in response)
+                // Handle both new flag (requiresOtp) and old flag (requiresPhoneVerification)
+                if (response.data.requiresOtp || response.data.requiresPhoneVerification) {
+                    // Store verification context in sessionStorage for persistence
+                    const verificationData = {
+                        phone: response.data.data.phone,
+                        phoneMasked: response.data.data.phoneMasked,
+                        email: response.data.data.email,
+                        name: response.data.data.name,
+                        userId: response.data.data.userId,
+                        source: 'register' as const
+                    };
+                    sessionStorage.setItem('pendingVerification', JSON.stringify(verificationData));
+
                     // Redirect to OTP verification
-                    navigate('/verify-phone', {
-                        state: {
-                            phone: response.data.data.phone,
-                            phoneMasked: response.data.data.phoneMasked,
-                            email: response.data.data.email,
-                            name: response.data.data.name,
-                            userId: response.data.data.userId,
-                            source: 'register'
-                        }
-                    });
+                    navigate('/verify-phone', { state: verificationData });
                     return;
                 }
             } else {
@@ -101,18 +104,26 @@ export const Login = () => {
         } catch (err: any) {
             const errorResponse = err.response?.data;
 
-            // Check for phone verification required (403)
-            if (err.response?.status === 403 && errorResponse?.code === 'PHONE_VERIFICATION_REQUIRED') {
+            // Check for OTP verification required (403)
+            // Handle both old code (PHONE_VERIFICATION_REQUIRED) and new code (OTP_REQUIRED)
+            const isOtpRequired = err.response?.status === 403 &&
+                (errorResponse?.code === 'OTP_REQUIRED' ||
+                    errorResponse?.code === 'PHONE_VERIFICATION_REQUIRED' ||
+                    errorResponse?.requiresOtp === true);
+
+            if (isOtpRequired) {
+                // Store verification context in sessionStorage for persistence
+                const verificationData = {
+                    phone: errorResponse.data.phone,
+                    phoneMasked: errorResponse.data.phoneMasked,
+                    email: errorResponse.data.email,
+                    userId: errorResponse.data.userId,
+                    source: 'login' as const
+                };
+                sessionStorage.setItem('pendingVerification', JSON.stringify(verificationData));
+
                 // Redirect to OTP verification
-                navigate('/verify-phone', {
-                    state: {
-                        phone: errorResponse.data.phone,
-                        phoneMasked: errorResponse.data.phoneMasked,
-                        email: errorResponse.data.email,
-                        userId: errorResponse.data.userId,
-                        source: 'login'
-                    }
-                });
+                navigate('/verify-phone', { state: verificationData });
                 return;
             }
 

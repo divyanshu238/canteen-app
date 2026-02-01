@@ -144,7 +144,8 @@ export const register = async (req, res, next) => {
             // Account created but NO tokens issued until phone verified
             return res.status(201).json({
                 success: true,
-                requiresPhoneVerification: true,
+                requiresOtp: true,
+                requiresPhoneVerification: true, // backward compat
                 message: 'Account created. Please verify your phone number to continue.',
                 data: {
                     userId: user._id.toString(),
@@ -222,8 +223,9 @@ export const login = async (req, res, next) => {
             return res.status(403).json({
                 success: false,
                 error: 'Phone verification required',
-                code: 'PHONE_VERIFICATION_REQUIRED',
-                requiresPhoneVerification: true,
+                code: 'OTP_REQUIRED',
+                requiresOtp: true,
+                requiresPhoneVerification: true, // backward compat
                 data: {
                     userId: user._id.toString(),
                     phone: user.phone,
@@ -301,11 +303,39 @@ export const refreshToken = async (req, res, next) => {
             });
         }
 
+        // ============================================
+        // SECURITY: Block token refresh if OTP not verified
+        // ============================================
+        const grandfathered = isUserGrandfathered(user);
+        const requiresVerification = config.requirePhoneVerification &&
+            user.phone &&
+            !user.isPhoneVerified &&
+            !grandfathered;
+
+        if (requiresVerification) {
+            // Revoke the token - user must verify OTP first
+            storedToken.isRevoked = true;
+            await storedToken.save();
+
+            return res.status(403).json({
+                success: false,
+                error: 'Phone verification required',
+                code: 'OTP_REQUIRED',
+                requiresOtp: true,
+                data: {
+                    userId: user._id.toString(),
+                    phone: user.phone,
+                    phoneMasked: user.phone.slice(0, 3) + '****' + user.phone.slice(-3),
+                    email: user.email
+                }
+            });
+        }
+
         // Revoke old refresh token
         storedToken.isRevoked = true;
         await storedToken.save();
 
-        // Generate new tokens
+        // Generate new tokens (only for verified/grandfathered users)
         const tokens = await generateTokens(user);
 
         res.json({
