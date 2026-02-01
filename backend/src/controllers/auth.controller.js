@@ -64,6 +64,30 @@ export const register = async (req, res, next) => {
     try {
         const { name, email, password, phone, role = 'student', verificationToken } = req.body;
 
+        // ============================================
+        // SECURITY: Fail loudly if phone is required but missing
+        // This prevents silent registration that can't complete OTP flow
+        // ============================================
+        if (config.requirePhoneVerification && !phone) {
+            console.error('❌ REGISTRATION BLOCKED: Phone number required but not provided');
+            console.error(`   Email: ${email}`);
+            console.error(`   REQUIRE_PHONE_VERIFICATION: ${config.requirePhoneVerification}`);
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number is required for registration. Please provide a valid 10-digit phone number.',
+                code: 'PHONE_REQUIRED'
+            });
+        }
+
+        // Validate phone format if provided
+        if (phone && !/^[0-9]{10}$/.test(phone)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Please provide a valid 10-digit phone number',
+                code: 'INVALID_PHONE_FORMAT'
+            });
+        }
+
         // Check if user exists
         const existingUser = await User.findOne({ email: email.toLowerCase() });
         if (existingUser) {

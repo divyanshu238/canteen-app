@@ -71,6 +71,11 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
     }
 
     try {
+        console.log(`📧 EMAIL SEND ATTEMPT:`);
+        console.log(`   From: ${config.emailFrom || config.emailUser}`);
+        console.log(`   To: ${email.slice(0, 3)}***${email.slice(email.indexOf('@'))}`);
+        console.log(`   Purpose: ${purpose}`);
+
         const transporter = createTransporter();
 
         const mailOptions = {
@@ -86,7 +91,8 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
         // Log masked email for debugging
         const [localPart, domain] = email.split('@');
         const masked = localPart.slice(0, 2) + '***@' + domain;
-        console.log(`📧 OTP email sent to ${masked}`);
+        console.log(`✅ EMAIL SENT successfully to ${masked}`);
+        console.log(`   MessageId: ${result.messageId}`);
 
         return {
             success: true,
@@ -94,7 +100,9 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
             provider: 'gmail'
         };
     } catch (error) {
-        console.error('Email send failed:', error.message);
+        console.error(`❌ EMAIL SEND FAILED:`);
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Code: ${error.code || 'N/A'}`);
         return {
             success: false,
             error: 'Failed to send email'

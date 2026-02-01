@@ -39,9 +39,9 @@ export const Login = () => {
                 if (password.length < 6) {
                     throw new Error('Password must be at least 6 characters');
                 }
-                // Phone is optional but if provided must be 10 digits
-                if (phone && !/^[0-9]{10}$/.test(phone)) {
-                    throw new Error('Please enter a valid 10-digit phone number');
+                // Phone is REQUIRED for OTP verification - must be exactly 10 digits
+                if (!phone || !/^[0-9]{10}$/.test(phone)) {
+                    throw new Error('Please enter a valid 10-digit phone number. Phone verification is required.');
                 }
 
                 response = await authAPI.register({
@@ -49,8 +49,8 @@ export const Login = () => {
                     email: email.trim().toLowerCase(),
                     password,
                     role,
-                    ...(phone ? { phone } : {})
-                } as any);
+                    phone // ALWAYS include phone - required for OTP flow
+                });
 
                 // Check if OTP verification is required (no tokens in response)
                 // Handle both new flag (requiresOtp) and old flag (requiresPhoneVerification)
@@ -267,12 +267,12 @@ export const Login = () => {
                                 </div>
                             </div>
 
-                            {/* Phone (Register only) */}
+                            {/* Phone (Register only) - REQUIRED for OTP verification */}
                             {mode === 'register' && (
                                 <div>
                                     <label className="block text-sm font-bold text-gray-700 mb-2">
                                         Phone Number
-                                        <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                                        <span className="text-red-500 ml-1">*</span>
                                     </label>
                                     <div className="relative">
                                         <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -283,10 +283,11 @@ export const Login = () => {
                                             className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                                             placeholder="10-digit mobile number"
                                             maxLength={10}
+                                            required
                                         />
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        For order updates & account security
+                                    <p className="text-xs text-orange-600 mt-1 font-medium">
+                                        Required for account verification via OTP
                                     </p>
                                 </div>
                             )}

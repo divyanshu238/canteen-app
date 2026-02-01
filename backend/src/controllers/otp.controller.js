@@ -101,12 +101,15 @@ export const sendVerificationOTP = async (req, res, next) => {
         const otpCode = OTP.generateOTP(config.otpLength);
         const otpHash = await OTP.hashOTP(otpCode);
 
+        console.log(`🔐 OTP GENERATED for phone ${phone.slice(0, 3)}****${phone.slice(-3)} (purpose: ${purpose})`);
+
         // Create or update OTP record
         if (existingOTP) {
             existingOTP.otpHash = otpHash;
             existingOTP.attempts = 0;
             existingOTP.expiresAt = new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000);
             await existingOTP.save();
+            console.log(`📝 OTP record UPDATED (resend #${existingOTP.resendCount})`);
         } else {
             // Invalidate any old OTPs for this phone/purpose
             await OTP.updateMany(
@@ -123,6 +126,7 @@ export const sendVerificationOTP = async (req, res, next) => {
                 expiresAt: new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000),
                 maxAttempts: config.otpMaxAttempts
             });
+            console.log(`📝 OTP record CREATED`);
         }
 
         // Get user email for delivery (email is default, free channel)
@@ -136,6 +140,10 @@ export const sendVerificationOTP = async (req, res, next) => {
         }
 
         // Deliver OTP via configured channel (email by default)
+        console.log(`📤 DELIVERING OTP via ${config.otpDeliveryChannel || 'email'} channel`);
+        console.log(`   Email: ${userEmail ? userEmail.slice(0, 3) + '***' + userEmail.slice(userEmail.indexOf('@')) : 'NOT AVAILABLE'}`);
+        console.log(`   Phone: ${phone.slice(0, 3)}****${phone.slice(-3)}`);
+
         const deliveryResult = await deliverOTP({
             email: userEmail,
             phone,
@@ -144,12 +152,18 @@ export const sendVerificationOTP = async (req, res, next) => {
         });
 
         if (!deliveryResult.success) {
-            console.error('Failed to deliver OTP:', deliveryResult.error);
+            console.error(`❌ OTP DELIVERY FAILED: ${deliveryResult.error}`);
+            console.error(`   Channel: ${deliveryResult.channel}`);
             return res.status(500).json({
                 success: false,
                 error: 'Failed to send verification code. Please try again.'
             });
         }
+
+        console.log(`✅ OTP DELIVERED successfully`);
+        console.log(`   Channel: ${deliveryResult.channel}`);
+        console.log(`   Destination: ${deliveryResult.destination || 'N/A'}`);
+        console.log(`   MessageId: ${deliveryResult.messageId || 'N/A'}`);
 
         // Build response with channel information
         const destination = deliveryResult.destination || (deliveryResult.channel === OTP_CHANNELS.EMAIL ? userEmail : phone);
