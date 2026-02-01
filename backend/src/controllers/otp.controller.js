@@ -1,10 +1,14 @@
 /**
  * OTP Controller
  * 
- * Handles phone number verification via OTP for:
+ * Handles OTP verification via Email (default, free) or SMS (optional, paid):
  * - New user registration (optional, controlled by feature flag)
  * - Resend OTP functionality
  * - OTP verification
+ * 
+ * Delivery Channel:
+ * - email (default) - FREE via Gmail SMTP
+ * - sms (optional) - Paid via Fast2SMS/Twilio
  * 
  * Backward Compatible:
  * - Feature flagged via REQUIRE_PHONE_VERIFICATION
@@ -14,7 +18,7 @@
 
 import config from '../config/index.js';
 import { User, OTP } from '../models/index.js';
-import { sendOTP } from '../services/sms.service.js';
+import { deliverOTP, getDeliveryMessage, getMaskedDestination, OTP_CHANNELS } from '../services/otp.service.js';
 import { isUserGrandfathered, validateVerificationToken } from '../utils/auth.utils.js';
 
 /**
@@ -121,22 +125,43 @@ export const sendVerificationOTP = async (req, res, next) => {
             });
         }
 
-        // Send OTP via SMS
-        const smsResult = await sendOTP(phone, otpCode, purpose);
+        // Get user email for delivery (email is default, free channel)
+        let userEmail = null;
+        if (req.user?.email) {
+            userEmail = req.user.email;
+        } else {
+            // Try to find user by phone to get their email
+            const existingUser = await User.findOne({ phone });
+            userEmail = existingUser?.email;
+        }
 
-        if (!smsResult.success) {
-            console.error('Failed to send OTP SMS:', smsResult.error);
+        // Deliver OTP via configured channel (email by default)
+        const deliveryResult = await deliverOTP({
+            email: userEmail,
+            phone,
+            otp: otpCode,
+            purpose
+        });
+
+        if (!deliveryResult.success) {
+            console.error('Failed to deliver OTP:', deliveryResult.error);
             return res.status(500).json({
                 success: false,
                 error: 'Failed to send verification code. Please try again.'
             });
         }
 
+        // Build response with channel information
+        const destination = deliveryResult.destination || (deliveryResult.channel === OTP_CHANNELS.EMAIL ? userEmail : phone);
+        const message = getDeliveryMessage(deliveryResult.channel, destination);
+        const maskedDestination = getMaskedDestination(deliveryResult.channel, destination);
+
         res.status(200).json({
             success: true,
-            message: 'Verification code sent successfully',
+            message,
             data: {
-                phone: phone.slice(0, 3) + '****' + phone.slice(-3), // Masked phone
+                channel: deliveryResult.channel,
+                destination: maskedDestination,
                 expiresInMinutes: config.otpExpiryMinutes,
                 purpose,
                 // Include OTP in development for testing

@@ -73,6 +73,18 @@ export const config = {
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
     twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
 
+    // Email Configuration (for OTP delivery - FREE via Gmail SMTP)
+    // How to get Gmail App Password:
+    // 1. Enable 2FA on your Gmail account
+    // 2. Go to Google Account > Security > App Passwords
+    // 3. Create a new app password for "Mail"
+    emailUser: process.env.EMAIL_USER || '',
+    emailPass: process.env.EMAIL_PASS || '',
+    emailFrom: process.env.EMAIL_FROM || '',
+
+    // OTP Delivery Channel: 'email' (default, free) or 'sms' (paid)
+    otpDeliveryChannel: process.env.OTP_DELIVERY_CHANNEL || 'email',
+
     // OTP Configuration
     otpLength: parseInt(process.env.OTP_LENGTH) || 6,
     otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES) || 5,

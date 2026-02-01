@@ -3,7 +3,7 @@ import { useDispatch } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { login } from '../store';
 import { otpAPI } from '../api';
-import { Phone, ArrowLeft, RefreshCw, Shield, CheckCircle, AlertCircle } from 'lucide-react';
+import { Mail, Phone, ArrowLeft, RefreshCw, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface PendingVerification {
     phone: string;
@@ -14,6 +14,12 @@ interface PendingVerification {
     source: 'login' | 'register';
 }
 
+// Delivery channel state
+interface DeliveryInfo {
+    channel: 'email' | 'sms' | 'console';
+    destination: string;
+}
+
 export const OTPVerification = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -21,6 +27,7 @@ export const OTPVerification = () => {
 
     // Get pending verification data from navigation state or sessionStorage
     const [pendingData, setPendingData] = useState<PendingVerification | null>(null);
+    const [deliveryInfo, setDeliveryInfo] = useState<DeliveryInfo | null>(null);
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [isLoading, setIsLoading] = useState(false);
     const [isSending, setIsSending] = useState(false);
@@ -79,12 +86,19 @@ export const OTPVerification = () => {
                 purpose: 'registration'
             });
 
-            setSuccess('Verification code sent successfully');
+            // Store delivery channel info
+            const data = response.data.data;
+            setDeliveryInfo({
+                channel: data.channel || 'email',
+                destination: data.destination || data.email || data.phone
+            });
+
+            setSuccess(response.data.message || 'Verification code sent successfully');
             setCountdown(60); // 60 second cooldown
 
             // In development, show the OTP
-            if (response.data.data?.otp) {
-                console.log('Dev OTP:', response.data.data.otp);
+            if (data.otp) {
+                console.log('Dev OTP:', data.otp);
             }
 
             // Clear success after 3 seconds
@@ -95,7 +109,7 @@ export const OTPVerification = () => {
                 setCountdown(errorData.waitSeconds);
                 setError(`Please wait ${errorData.waitSeconds} seconds before resending`);
             } else {
-                setError(errorData?.error || 'Failed to send OTP. Please try again.');
+                setError(errorData?.error || 'Failed to send verification code. Please try again.');
             }
         } finally {
             setIsSending(false);
@@ -239,11 +253,20 @@ export const OTPVerification = () => {
 
                     <div className="flex items-start gap-4">
                         <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <Phone className="text-white" size={24} />
+                            {deliveryInfo?.channel === 'sms' ? (
+                                <Phone className="text-white" size={24} />
+                            ) : (
+                                <Mail className="text-white" size={24} />
+                            )}
                         </div>
                         <div>
                             <h3 className="text-white font-bold text-lg">One-Time Code</h3>
-                            <p className="text-orange-100">Enter the 6-digit code sent to your phone</p>
+                            <p className="text-orange-100">
+                                {deliveryInfo?.channel === 'sms'
+                                    ? 'Enter the 6-digit code sent to your phone'
+                                    : 'Check your email for the 6-digit code'
+                                }
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -269,16 +292,23 @@ export const OTPVerification = () => {
                         {/* Header */}
                         <div className="text-center mb-8">
                             <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Phone className="text-orange-600" size={32} />
+                                {deliveryInfo?.channel === 'sms' ? (
+                                    <Phone className="text-orange-600" size={32} />
+                                ) : (
+                                    <Mail className="text-orange-600" size={32} />
+                                )}
                             </div>
                             <h2 className="text-3xl font-black text-gray-900 mb-2">
-                                Verify Your Phone
+                                Verify Your Account
                             </h2>
                             <p className="text-gray-500">
-                                We've sent a verification code to
+                                {deliveryInfo?.channel === 'sms'
+                                    ? "We've sent a verification code to"
+                                    : "Check your email for the verification code"
+                                }
                             </p>
                             <p className="text-lg font-bold text-gray-900 mt-1">
-                                +91 {pendingData.phoneMasked}
+                                {deliveryInfo?.destination || pendingData.email || `+91 ${pendingData.phoneMasked}`}
                             </p>
                         </div>
 
@@ -322,8 +352,8 @@ export const OTPVerification = () => {
                                         onChange={e => handleOtpChange(index, e.target.value)}
                                         onKeyDown={e => handleKeyDown(index, e)}
                                         className={`w-12 h-14 text-center text-2xl font-bold border-2 rounded-xl outline-none transition-all ${digit
-                                                ? 'border-orange-500 bg-orange-50'
-                                                : 'border-gray-200 bg-gray-50'
+                                            ? 'border-orange-500 bg-orange-50'
+                                            : 'border-gray-200 bg-gray-50'
                                             } focus:border-orange-500 focus:ring-2 focus:ring-orange-200`}
                                         disabled={isLoading}
                                     />
