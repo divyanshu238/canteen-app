@@ -40,6 +40,15 @@ const app = express();
 const httpServer = createServer(app);
 
 // =====================
+// PROXY TRUST CONFIGURATION (CRITICAL FOR RENDER/HEROKU)
+// =====================
+// Render/Heroku/Railway use reverse proxies. Without this setting,
+// express-rate-limit sees ALL requests as coming from ONE IP (the proxy),
+// causing the rate limit to be exhausted by combined traffic.
+// Setting to 1 = trust the first proxy hop (Render's load balancer).
+app.set('trust proxy', 1);
+
+// =====================
 // SECURITY MIDDLEWARE
 // =====================
 
@@ -63,7 +72,8 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Rate limiting - Applied to all /api/ routes EXCEPT /api/health (defined above)
+// Rate limiting - Applied to all /api/ routes EXCEPT /api/health
+// The skip() function provides an explicit bypass as a safety guarantee.
 const limiter = rateLimit({
     windowMs: config.rateLimitWindowMs,
     max: config.rateLimitMax,
@@ -72,7 +82,10 @@ const limiter = rateLimit({
         error: 'Too many requests. Please try again later.'
     },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    // CRITICAL: Explicitly skip rate limiting for health checks
+    // This is a belt-and-suspenders approach alongside route ordering
+    skip: (req) => req.path === '/api/health' || req.path === '/health'
 });
 
 app.use('/api/', limiter);
