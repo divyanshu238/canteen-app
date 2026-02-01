@@ -29,7 +29,15 @@ const userSchema = new mongoose.Schema({
     phone: {
         type: String,
         trim: true,
-        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit phone number']
+        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit phone number'],
+        index: true
+    },
+    isPhoneVerified: {
+        type: Boolean,
+        default: false
+    },
+    phoneVerifiedAt: {
+        type: Date
     },
     role: {
         type: String,
@@ -381,10 +389,146 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
 
+// =====================
+// OTP SCHEMA
+// =====================
+const otpSchema = new mongoose.Schema({
+    phone: {
+        type: String,
+        required: [true, 'Phone number is required'],
+        match: [/^[0-9]{10}$/, 'Please enter a valid 10-digit phone number'],
+        index: true
+    },
+    otpHash: {
+        type: String,
+        required: [true, 'OTP hash is required'],
+        select: false // Don't include in queries by default
+    },
+    purpose: {
+        type: String,
+        enum: ['registration', 'login', 'password_reset'],
+        default: 'registration'
+    },
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        index: true
+    },
+    attempts: {
+        type: Number,
+        default: 0,
+        max: [5, 'Maximum verification attempts exceeded']
+    },
+    maxAttempts: {
+        type: Number,
+        default: 5
+    },
+    isUsed: {
+        type: Boolean,
+        default: false
+    },
+    expiresAt: {
+        type: Date,
+        required: true,
+        default: () => new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
+    },
+    lastResendAt: {
+        type: Date,
+        default: Date.now
+    },
+    resendCount: {
+        type: Number,
+        default: 0,
+        max: [5, 'Maximum resend attempts exceeded']
+    }
+}, {
+    timestamps: true
+});
+
+// Compound indexes for efficient queries
+otpSchema.index({ phone: 1, purpose: 1, isUsed: 1 });
+otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-cleanup expired OTPs
+
+// Static method to generate OTP
+otpSchema.statics.generateOTP = function (length = 6) {
+    let otp = '';
+    for (let i = 0; i < length; i++) {
+        otp += Math.floor(Math.random() * 10);
+    }
+    return otp;
+};
+
+// Static method to hash OTP (using bcrypt for security)
+otpSchema.statics.hashOTP = async function (otp) {
+    return await bcrypt.hash(otp, 10);
+};
+
+// Method to verify OTP
+otpSchema.methods.verifyOTP = async function (candidateOTP) {
+    // Check if already used
+    if (this.isUsed) {
+        return { valid: false, error: 'OTP has already been used' };
+    }
+
+    // Check if expired
+    if (new Date() > this.expiresAt) {
+        return { valid: false, error: 'OTP has expired' };
+    }
+
+    // Check attempt limit
+    if (this.attempts >= this.maxAttempts) {
+        return { valid: false, error: 'Maximum verification attempts exceeded. Request a new OTP.' };
+    }
+
+    // Increment attempts
+    this.attempts += 1;
+    await this.save();
+
+    // Get the document with otpHash
+    const otpDoc = await this.constructor.findById(this._id).select('+otpHash');
+
+    // Verify OTP
+    const isMatch = await bcrypt.compare(candidateOTP, otpDoc.otpHash);
+
+    if (!isMatch) {
+        return {
+            valid: false,
+            error: `Invalid OTP. ${this.maxAttempts - this.attempts} attempts remaining.`,
+            attemptsRemaining: this.maxAttempts - this.attempts
+        };
+    }
+
+    // Mark as used
+    this.isUsed = true;
+    await this.save();
+
+    return { valid: true };
+};
+
+// Method to check if can resend
+otpSchema.methods.canResend = function (cooldownSeconds = 60) {
+    const cooldownMs = cooldownSeconds * 1000;
+    const timeSinceLastResend = Date.now() - this.lastResendAt.getTime();
+
+    if (timeSinceLastResend < cooldownMs) {
+        const waitSeconds = Math.ceil((cooldownMs - timeSinceLastResend) / 1000);
+        return { canResend: false, waitSeconds };
+    }
+
+    if (this.resendCount >= 5) {
+        return { canResend: false, error: 'Maximum resend attempts exceeded. Please try again later.' };
+    }
+
+    return { canResend: true };
+};
+
+export const OTP = mongoose.model('OTP', otpSchema);
+
 export default {
     User,
     Canteen,
     MenuItem,
     Order,
-    RefreshToken
+    RefreshToken,
+    OTP
 };

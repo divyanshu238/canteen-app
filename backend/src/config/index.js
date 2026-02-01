@@ -60,6 +60,34 @@ export const config = {
     corsOrigins: process.env.CORS_ORIGINS
         ? process.env.CORS_ORIGINS.split(',')
         : ['http://localhost:5173', 'http://localhost:5174'],
+
+    // SMS Provider Configuration
+    // Options: 'fast2sms', 'twilio', 'console' (for dev)
+    smsProvider: process.env.SMS_PROVIDER || 'console',
+
+    // Fast2SMS (India-focused provider)
+    fast2smsApiKey: process.env.FAST2SMS_API_KEY || '',
+
+    // Twilio (Global provider)
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+    twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
+
+    // OTP Configuration
+    otpLength: parseInt(process.env.OTP_LENGTH) || 6,
+    otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES) || 5,
+    otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS) || 5,
+    otpResendCooldownSeconds: parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 60,
+
+    // Feature Flags (backward compatible - defaults to false)
+    // When false, existing users can login without phone verification
+    // When true, new registrations require phone verification
+    requirePhoneVerification: process.env.REQUIRE_PHONE_VERIFICATION === 'true',
+
+    // Grandfather date - users created before this date are exempt from phone verification
+    // Format: ISO date string (e.g., '2026-02-01T00:00:00Z')
+    // If not set, all existing users at time of deployment are grandfathered
+    phoneVerificationGrandfatherDate: process.env.PHONE_VERIFICATION_GRANDFATHER_DATE || null,
 };
 
 // Log config (without secrets) in development

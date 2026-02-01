@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
-import { User, RefreshToken, Canteen } from '../models/index.js';
+import { User, RefreshToken, Canteen, OTP } from '../models/index.js';
 import { AppError } from '../middleware/error.js';
+import { validateVerificationToken, isUserGrandfathered } from '../utils/auth.utils.js';
 
 /**
  * Generate JWT tokens
@@ -48,6 +49,8 @@ const formatUserResponse = (user) => ({
     phone: user.phone,
     canteenId: user.canteenId?.toString(),
     isApproved: user.isApproved,
+    isPhoneVerified: user.isPhoneVerified,
+    phoneVerifiedAt: user.phoneVerifiedAt,
     createdAt: user.createdAt
 });
 
@@ -57,7 +60,7 @@ const formatUserResponse = (user) => ({
  */
 export const register = async (req, res, next) => {
     try {
-        const { name, email, password, phone, role = 'student' } = req.body;
+        const { name, email, password, phone, role = 'student', verificationToken } = req.body;
 
         // Check if user exists
         const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -68,6 +71,36 @@ export const register = async (req, res, next) => {
             });
         }
 
+        // Check phone verification if feature is enabled and phone is provided
+        let isPhoneVerified = false;
+        let phoneVerifiedAt = null;
+
+        if (phone && config.requirePhoneVerification) {
+            // Check if phone is already registered
+            const existingPhoneUser = await User.findOne({ phone, isPhoneVerified: true });
+            if (existingPhoneUser) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'This phone number is already registered'
+                });
+            }
+
+            // Validate verification token if provided
+            if (verificationToken) {
+                const tokenResult = validateVerificationToken(verificationToken);
+                if (tokenResult.valid && tokenResult.phone === phone) {
+                    isPhoneVerified = true;
+                    phoneVerifiedAt = new Date(tokenResult.verifiedAt);
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        error: tokenResult.error || 'Phone verification required'
+                    });
+                }
+            }
+            // If no token and verification is required, we'll create user but flag as unverified
+        }
+
         // Create user
         const userData = {
             name: name.trim(),
@@ -75,7 +108,9 @@ export const register = async (req, res, next) => {
             password,
             phone,
             role: ['student', 'partner'].includes(role) ? role : 'student',
-            isApproved: role !== 'partner' // Partners need approval
+            isApproved: role !== 'partner', // Partners need approval
+            isPhoneVerified,
+            phoneVerifiedAt
         };
 
         const user = await User.create(userData);
@@ -98,11 +133,20 @@ export const register = async (req, res, next) => {
         // Generate tokens
         const tokens = await generateTokens(user);
 
+        // Determine if verification is required for this user
+        const requiresVerification = config.requirePhoneVerification &&
+            phone &&
+            !isPhoneVerified;
+
         res.status(201).json({
             success: true,
             data: {
                 user: formatUserResponse(user),
-                ...tokens
+                ...tokens,
+                requiresPhoneVerification: requiresVerification,
+                message: requiresVerification
+                    ? 'Account created. Please verify your phone number to access all features.'
+                    : undefined
             }
         });
     } catch (error) {
@@ -144,6 +188,13 @@ export const login = async (req, res, next) => {
             });
         }
 
+        // Check phone verification (with grandfathering)
+        const grandfathered = isUserGrandfathered(user);
+        const requiresVerification = config.requirePhoneVerification &&
+            user.phone &&
+            !user.isPhoneVerified &&
+            !grandfathered;
+
         // Generate tokens
         const tokens = await generateTokens(user);
 
@@ -151,7 +202,12 @@ export const login = async (req, res, next) => {
             success: true,
             data: {
                 user: formatUserResponse(user),
-                ...tokens
+                ...tokens,
+                requiresPhoneVerification: requiresVerification,
+                isGrandfathered: grandfathered,
+                message: requiresVerification
+                    ? 'Please verify your phone number to continue.'
+                    : undefined
             }
         });
     } catch (error) {
