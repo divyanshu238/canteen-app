@@ -3,31 +3,131 @@
  * 
  * Uses Nodemailer with Gmail SMTP (FREE forever)
  * 
+ * PRODUCTION-HARDENED VERSION:
+ * - Explicit SMTP configuration (no silent failures)
+ * - transporter.verify() on startup
+ * - Full error propagation
+ * - TLS configuration for cloud environments (Render, Railway, etc.)
+ * 
  * Configuration:
  * - EMAIL_USER: Gmail address
- * - EMAIL_PASS: App Password (not regular password)
+ * - EMAIL_PASS: App Password (16-char, no spaces) - NOT regular password
  * - EMAIL_FROM: Display name for sender
  * 
  * How to get Gmail App Password:
- * 1. Enable 2FA on your Gmail account
- * 2. Go to Google Account > Security > App Passwords
- * 3. Create a new app password for "Mail"
+ * 1. Enable 2FA on your Gmail account (REQUIRED)
+ * 2. Go to Google Account > Security > 2-Step Verification > App Passwords
+ * 3. Create a new app password for "Mail" on "Other (Custom name)"
+ * 4. Copy the 16-character password (remove spaces if any)
  */
 
 import nodemailer from 'nodemailer';
 import config from '../config/index.js';
 
+// Singleton transporter instance
+let transporterInstance = null;
+let transporterVerified = false;
+
 /**
- * Create email transporter
+ * Create and verify email transporter
+ * Uses explicit Gmail SMTP configuration for production reliability
  */
 const createTransporter = () => {
-    return nodemailer.createTransport({
-        service: 'gmail',
+    // Gmail SMTP explicit configuration
+    // DO NOT use shorthand 'service: gmail' - it can silently fail in cloud environments
+    const transporterConfig = {
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true, // true for port 465 (SSL)
         auth: {
             user: config.emailUser,
             pass: config.emailPass
+        },
+        // TLS settings for cloud environments
+        tls: {
+            // Do not fail on invalid certs (some cloud providers have issues)
+            rejectUnauthorized: true,
+            // Minimum TLS version
+            minVersion: 'TLSv1.2'
+        },
+        // Connection timeout
+        connectionTimeout: 10000, // 10 seconds
+        // Socket timeout
+        socketTimeout: 10000, // 10 seconds
+        // Debug logging in development
+        debug: !config.isProduction,
+        logger: !config.isProduction
+    };
+
+    console.log('📧 Creating SMTP transporter with config:');
+    console.log(`   Host: ${transporterConfig.host}`);
+    console.log(`   Port: ${transporterConfig.port}`);
+    console.log(`   Secure: ${transporterConfig.secure}`);
+    console.log(`   User: ${config.emailUser ? config.emailUser.slice(0, 3) + '***' : '(not set)'}`);
+    console.log(`   Pass: ${config.emailPass ? '[SET - ' + config.emailPass.length + ' chars]' : '(not set)'}`);
+
+    return nodemailer.createTransport(transporterConfig);
+};
+
+/**
+ * Get or create the transporter singleton
+ * Verifies connection on first use
+ */
+const getTransporter = async () => {
+    if (!transporterInstance) {
+        transporterInstance = createTransporter();
+    }
+
+    // Verify transporter on first use
+    if (!transporterVerified) {
+        console.log('🔍 Verifying SMTP connection...');
+        try {
+            await transporterInstance.verify();
+            transporterVerified = true;
+            console.log('✅ SMTP connection verified successfully');
+        } catch (error) {
+            console.error('❌ SMTP VERIFICATION FAILED:');
+            console.error(`   Error: ${error.message}`);
+            console.error(`   Code: ${error.code || 'N/A'}`);
+            console.error(`   Response: ${error.response || 'N/A'}`);
+            console.error(`   ResponseCode: ${error.responseCode || 'N/A'}`);
+
+            // Reset transporter for retry
+            transporterInstance = null;
+            transporterVerified = false;
+
+            // Re-throw with clear message
+            throw new Error(`SMTP verification failed: ${error.message}`);
         }
-    });
+    }
+
+    return transporterInstance;
+};
+
+/**
+ * Verify SMTP connection on startup (call from index.js)
+ * This should be called during app initialization to fail fast
+ */
+export const verifyEmailTransporter = async () => {
+    if (!config.emailUser || !config.emailPass) {
+        if (config.isProduction) {
+            throw new Error('EMAIL_USER and EMAIL_PASS are required in production');
+        }
+        console.warn('⚠️ Email credentials not configured - emails will be logged to console in development');
+        return false;
+    }
+
+    try {
+        await getTransporter();
+        console.log('✅ Email service ready');
+        return true;
+    } catch (error) {
+        console.error('❌ Email service initialization failed:', error.message);
+        if (config.isProduction) {
+            throw error; // Fail fast in production
+        }
+        return false;
+    }
 };
 
 /**
@@ -40,6 +140,7 @@ const createTransporter = () => {
 export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
     // Validate email
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        console.error('❌ EMAIL SEND FAILED: Invalid email address');
         return {
             success: false,
             error: 'Invalid email address'
@@ -51,7 +152,7 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
         // Fallback to console logging in development
         if (!config.isProduction) {
             console.log('\n' + '='.repeat(50));
-            console.log('📧 OTP EMAIL (Development Mode)');
+            console.log('📧 OTP EMAIL (Development Mode - Console Only)');
             console.log('='.repeat(50));
             console.log(`To: ${email}`);
             console.log(`OTP: ${otp}`);
@@ -61,13 +162,16 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
 
             return {
                 success: true,
-                messageId: `dev_email_${Date.now()}`,
+                messageId: `dev_console_${Date.now()}`,
                 provider: 'console'
             };
         }
 
-        console.error('Email credentials not configured');
-        return { success: false, error: 'Email service not configured' };
+        console.error('❌ EMAIL SEND FAILED: Email credentials not configured in production');
+        return {
+            success: false,
+            error: 'Email service not configured'
+        };
     }
 
     try {
@@ -75,37 +179,99 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
         console.log(`   From: ${config.emailFrom || config.emailUser}`);
         console.log(`   To: ${email.slice(0, 3)}***${email.slice(email.indexOf('@'))}`);
         console.log(`   Purpose: ${purpose}`);
+        console.log(`   Time: ${new Date().toISOString()}`);
 
-        const transporter = createTransporter();
+        // Get verified transporter
+        const transporter = await getTransporter();
 
         const mailOptions = {
             from: config.emailFrom || `Canteen Connect <${config.emailUser}>`,
             to: email,
             subject: `Your Canteen Connect Verification Code: ${otp}`,
             text: getPlainTextEmail(otp, purpose),
-            html: getHtmlEmail(otp, purpose)
+            html: getHtmlEmail(otp, purpose),
+            // Add envelope for explicit sender
+            envelope: {
+                from: config.emailUser,
+                to: email
+            }
         };
+
+        console.log(`📤 Sending email via SMTP...`);
+        const startTime = Date.now();
 
         const result = await transporter.sendMail(mailOptions);
 
-        // Log masked email for debugging
+        const elapsed = Date.now() - startTime;
+
+        // Verify result has required fields
+        if (!result || !result.messageId) {
+            console.error('❌ EMAIL SEND FAILED: No messageId in response');
+            console.error(`   Response: ${JSON.stringify(result)}`);
+            return {
+                success: false,
+                error: 'Email send returned empty response'
+            };
+        }
+
+        // Check for rejected recipients
+        if (result.rejected && result.rejected.length > 0) {
+            console.error('❌ EMAIL REJECTED by server:');
+            console.error(`   Rejected: ${result.rejected.join(', ')}`);
+            return {
+                success: false,
+                error: `Email rejected: ${result.rejected.join(', ')}`
+            };
+        }
+
+        // Check accepted recipients
+        if (!result.accepted || result.accepted.length === 0) {
+            console.error('❌ EMAIL NOT ACCEPTED: No recipients accepted');
+            console.error(`   Response: ${JSON.stringify(result)}`);
+            return {
+                success: false,
+                error: 'Email was not accepted by the server'
+            };
+        }
+
+        // Log success with full details
         const [localPart, domain] = email.split('@');
         const masked = localPart.slice(0, 2) + '***@' + domain;
         console.log(`✅ EMAIL SENT successfully to ${masked}`);
         console.log(`   MessageId: ${result.messageId}`);
+        console.log(`   Accepted: ${result.accepted.join(', ')}`);
+        console.log(`   Response: ${result.response}`);
+        console.log(`   Elapsed: ${elapsed}ms`);
 
         return {
             success: true,
             messageId: result.messageId,
+            accepted: result.accepted,
+            response: result.response,
             provider: 'gmail'
         };
     } catch (error) {
+        // Full error logging - NEVER swallow errors
         console.error(`❌ EMAIL SEND FAILED:`);
         console.error(`   Error: ${error.message}`);
         console.error(`   Code: ${error.code || 'N/A'}`);
+        console.error(`   Command: ${error.command || 'N/A'}`);
+        console.error(`   Response: ${error.response || 'N/A'}`);
+        console.error(`   ResponseCode: ${error.responseCode || 'N/A'}`);
+        console.error(`   Stack: ${error.stack}`);
+
+        // Reset transporter on auth errors to force re-verification
+        if (error.code === 'EAUTH' || error.responseCode === 535) {
+            console.error('🔄 Resetting transporter due to auth error...');
+            transporterInstance = null;
+            transporterVerified = false;
+        }
+
         return {
             success: false,
-            error: 'Failed to send email'
+            error: `Failed to send email: ${error.message}`,
+            errorCode: error.code,
+            errorDetails: error.response
         };
     }
 };
@@ -179,5 +345,6 @@ const getHtmlEmail = (otp, purpose) => {
 };
 
 export default {
-    sendOTPEmail
+    sendOTPEmail,
+    verifyEmailTransporter
 };

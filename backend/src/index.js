@@ -34,6 +34,7 @@ import { connectDB, disconnectDB } from './config/db.js';
 import { setupRoutes } from './routes/index.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import { seedDatabase } from './seed.js';
+import { verifyEmailTransporter } from './services/email.service.js';
 
 // Initialize Express app
 const app = express();
@@ -160,6 +161,26 @@ const initDatabase = async () => {
     // Seed database in development
     if (!config.isProduction) {
         await seedDatabase();
+    }
+
+    // =====================
+    // VERIFY EMAIL SERVICE (FAIL FAST)
+    // =====================
+    // In production, this will throw if SMTP credentials are invalid,
+    // preventing the app from starting with broken email delivery.
+    try {
+        const emailReady = await verifyEmailTransporter();
+        if (emailReady) {
+            console.log('✅ Email service: READY');
+        } else {
+            console.warn('⚠️ Email service: NOT CONFIGURED (development mode)');
+        }
+    } catch (error) {
+        console.error('❌ Email service verification failed:', error.message);
+        if (config.isProduction) {
+            console.error('   FATAL: Cannot start in production without working email service');
+            process.exit(1);
+        }
     }
 };
 

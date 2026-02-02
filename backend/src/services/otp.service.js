@@ -5,6 +5,11 @@
  * 
  * ZERO phone logic. ZERO SMS. ZERO fallbacks.
  * 
+ * HARDENED FOR PRODUCTION:
+ * - Full error propagation (no swallowed exceptions)
+ * - Clear success/failure indicators
+ * - Detailed logging for debugging
+ * 
  * Email is delivered via:
  * - Nodemailer + Gmail SMTP (FREE forever)
  */
@@ -21,9 +26,13 @@ import { maskEmail } from '../utils/auth.utils.js';
  * @param {string} params.email - User's email address (REQUIRED)
  * @param {string} params.otp - OTP code to send
  * @param {string} params.purpose - Purpose of OTP
- * @returns {Promise<{success: boolean, messageId?: string, error?: string}>}
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, errorDetails?: string}>}
  */
 export const deliverOTP = async ({ email, otp, purpose = 'verification' }) => {
+    console.log('='.repeat(50));
+    console.log('📤 OTP DELIVERY SERVICE INVOKED');
+    console.log('='.repeat(50));
+
     // Validate email
     if (!email) {
         console.error('❌ OTP DELIVERY FAILED: Email is required');
@@ -33,26 +42,54 @@ export const deliverOTP = async ({ email, otp, purpose = 'verification' }) => {
         };
     }
 
+    // Validate email format
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        console.error('❌ OTP DELIVERY FAILED: Invalid email format');
+        return {
+            success: false,
+            error: 'Invalid email address format'
+        };
+    }
+
     // Validate OTP
-    if (!otp || otp.length !== 6) {
-        console.error('❌ OTP DELIVERY FAILED: Invalid OTP format');
+    if (!otp) {
+        console.error('❌ OTP DELIVERY FAILED: OTP is required');
+        return {
+            success: false,
+            error: 'OTP is required'
+        };
+    }
+
+    if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
+        console.error('❌ OTP DELIVERY FAILED: Invalid OTP format (must be 6 digits)');
         return {
             success: false,
             error: 'Invalid OTP format'
         };
     }
 
-    console.log(`📤 DELIVERING OTP via EMAIL to ${maskEmail(email)} (purpose: ${purpose})`);
+    console.log(`📧 Delivering OTP via EMAIL`);
+    console.log(`   To: ${maskEmail(email)}`);
+    console.log(`   Purpose: ${purpose}`);
+    console.log(`   OTP Length: ${otp.length} digits`);
 
     // Send via email - the ONLY delivery method
     const result = await sendOTPEmail(email, otp, purpose);
 
+    console.log('='.repeat(50));
     if (result.success) {
-        console.log(`✅ OTP DELIVERED to ${maskEmail(email)}`);
+        console.log(`✅ OTP DELIVERY SUCCESS`);
+        console.log(`   Email: ${maskEmail(email)}`);
         console.log(`   MessageId: ${result.messageId || 'N/A'}`);
+        console.log(`   Provider: ${result.provider || 'gmail'}`);
     } else {
-        console.error(`❌ OTP DELIVERY FAILED: ${result.error}`);
+        console.error(`❌ OTP DELIVERY FAILED`);
+        console.error(`   Email: ${maskEmail(email)}`);
+        console.error(`   Error: ${result.error}`);
+        console.error(`   ErrorCode: ${result.errorCode || 'N/A'}`);
+        console.error(`   ErrorDetails: ${result.errorDetails || 'N/A'}`);
     }
+    console.log('='.repeat(50));
 
     return {
         ...result,

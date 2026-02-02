@@ -119,14 +119,36 @@ export const sendVerificationOTP = async (req, res, next) => {
 
         if (!emailResult.success) {
             console.error(`❌ OTP EMAIL FAILED: ${emailResult.error}`);
+            console.error(`   ErrorCode: ${emailResult.errorCode || 'N/A'}`);
+            console.error(`   ErrorDetails: ${emailResult.errorDetails || 'N/A'}`);
+
+            // CRITICAL: Invalidate the OTP record since email was not sent
+            // This prevents orphaned OTP records that can never be delivered
+            await OTP.updateMany(
+                { email: normalizedEmail, purpose, isUsed: false },
+                { isUsed: true }
+            );
+            console.log(`🗑️ OTP record invalidated (email delivery failed)`);
+
             return res.status(500).json({
                 success: false,
-                error: 'Failed to send verification email. Please try again.'
+                error: 'Failed to send verification email. Please try again.',
+                code: 'EMAIL_DELIVERY_FAILED',
+                // Include error details in non-production for debugging
+                ...(config.isProduction ? {} : {
+                    debugInfo: {
+                        errorMessage: emailResult.error,
+                        errorCode: emailResult.errorCode,
+                        errorDetails: emailResult.errorDetails
+                    }
+                })
             });
         }
 
         console.log(`✅ OTP EMAIL SENT to ${maskEmail(normalizedEmail)}`);
         console.log(`   MessageId: ${emailResult.messageId || 'N/A'}`);
+        console.log(`   Provider: ${emailResult.provider || 'N/A'}`);
+
 
         res.status(200).json({
             success: true,

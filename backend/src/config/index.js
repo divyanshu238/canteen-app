@@ -58,6 +58,31 @@ if (isProduction && process.env.OTP_DELIVERY_CHANNEL && process.env.OTP_DELIVERY
     process.exit(1);
 }
 
+// ============================================
+// VALIDATE EMAIL CREDENTIALS FORMAT
+// ============================================
+// Gmail App Passwords are 16 characters (without spaces)
+// If spaces are included, they should be removed
+if (isProduction && process.env.EMAIL_PASS) {
+    const emailPass = process.env.EMAIL_PASS;
+    const cleanedPass = emailPass.replace(/\s/g, ''); // Remove all spaces
+
+    if (emailPass !== cleanedPass) {
+        console.warn('⚠️ EMAIL_PASS contains spaces - this is unusual for Gmail App Passwords');
+        console.warn('   Gmail App Passwords should be 16 characters WITHOUT spaces');
+        console.warn('   Example: abcdefghijklmnop (not: abcd efgh ijkl mnop)');
+    }
+
+    if (cleanedPass.length !== 16) {
+        console.warn(`⚠️ EMAIL_PASS has ${cleanedPass.length} characters (expected 16 for Gmail App Password)`);
+        console.warn('   Make sure you are using a Gmail App Password, NOT your regular Gmail password');
+        console.warn('   To get an App Password:');
+        console.warn('   1. Enable 2FA on your Gmail account');
+        console.warn('   2. Go to: https://myaccount.google.com/apppasswords');
+        console.warn('   3. Generate a new App Password for "Mail"');
+    }
+}
+
 export const config = {
     // Environment
     nodeEnv: process.env.NODE_ENV || 'development',

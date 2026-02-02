@@ -161,12 +161,22 @@ export const register = async (req, res, next) => {
             console.log(`📤 SENDING OTP EMAIL to ${maskEmail(user.email)}`);
             const emailResult = await sendOTPEmail(user.email, otpCode, 'registration');
 
+            let emailSent = true;
             if (!emailResult.success) {
                 console.error(`❌ OTP EMAIL FAILED: ${emailResult.error}`);
-                // Don't fail registration, but log the error
-                // User can request resend from the verify page
+                console.error(`   ErrorCode: ${emailResult.errorCode || 'N/A'}`);
+                console.error(`   ErrorDetails: ${emailResult.errorDetails || 'N/A'}`);
+                emailSent = false;
+
+                // Invalidate the OTP record since email was not sent
+                await OTP.updateMany(
+                    { email: user.email, purpose: 'registration', isUsed: false },
+                    { isUsed: true }
+                );
+                console.log(`🗑️ OTP record invalidated (email delivery failed)`);
             } else {
                 console.log(`✅ OTP EMAIL SENT to ${maskEmail(user.email)}`);
+                console.log(`   MessageId: ${emailResult.messageId || 'N/A'}`);
             }
 
             // Return success but NO TOKENS
@@ -174,7 +184,10 @@ export const register = async (req, res, next) => {
                 success: true,
                 requiresOtp: true,
                 verificationType: 'email',
-                message: 'Account created. Please check your email for the verification code.',
+                message: emailSent
+                    ? 'Account created. Please check your email for the verification code.'
+                    : 'Account created but verification email failed. Please request a new code.',
+                emailSent: emailSent,
                 data: {
                     userId: user._id.toString(),
                     email: user.email,
