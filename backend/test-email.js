@@ -48,22 +48,24 @@ if (emailPass !== cleanedPass) {
     console.warn('   Gmail App Passwords should NOT have spaces');
 }
 
-console.log('\n🔧 Creating SMTP Transporter...');
+console.log('\n🔧 Creating SMTP Transporter (Render-compatible config)...');
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,              // STARTTLS port (works on Render, port 465 is blocked)
+    secure: false,          // false for port 587 - upgrades via STARTTLS
+    requireTLS: true,       // Require TLS upgrade
     auth: {
         user: emailUser,
         pass: emailPass
     },
     tls: {
-        rejectUnauthorized: true,
+        rejectUnauthorized: false,  // Allow for cloud environments
         minVersion: 'TLSv1.2'
     },
-    connectionTimeout: 10000,
-    socketTimeout: 10000,
+    connectionTimeout: 30000,   // 30 seconds
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
     debug: true,
     logger: true
 });

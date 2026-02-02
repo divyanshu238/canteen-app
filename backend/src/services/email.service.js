@@ -31,29 +31,34 @@ let transporterVerified = false;
 /**
  * Create and verify email transporter
  * Uses explicit Gmail SMTP configuration for production reliability
+ * 
+ * RENDER COMPATIBILITY:
+ * - Render free tier BLOCKS port 465 (SSL) → causes ETIMEDOUT
+ * - Use port 587 (STARTTLS) instead → works on all cloud platforms
  */
 const createTransporter = () => {
-    // Gmail SMTP explicit configuration
-    // DO NOT use shorthand 'service: gmail' - it can silently fail in cloud environments
+    // Gmail SMTP configuration - RENDER COMPATIBLE
+    // Port 587 with STARTTLS works on Render, Railway, Heroku, etc.
     const transporterConfig = {
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true, // true for port 465 (SSL)
+        port: 587,              // STARTTLS port (NOT 465 which is blocked on Render)
+        secure: false,          // false for port 587 - upgrades to TLS via STARTTLS
+        requireTLS: true,       // Require STARTTLS upgrade (security)
         auth: {
             user: config.emailUser,
             pass: config.emailPass
         },
         // TLS settings for cloud environments
         tls: {
-            // Do not fail on invalid certs (some cloud providers have issues)
-            rejectUnauthorized: true,
-            // Minimum TLS version
+            // Allow self-signed certs (some cloud providers need this)
+            rejectUnauthorized: false,
+            // Minimum TLS version for security
             minVersion: 'TLSv1.2'
         },
-        // Connection timeout
-        connectionTimeout: 10000, // 10 seconds
-        // Socket timeout
-        socketTimeout: 10000, // 10 seconds
+        // Increased timeouts for cloud environments
+        connectionTimeout: 30000, // 30 seconds (Render can be slow)
+        greetingTimeout: 30000,   // 30 seconds for SMTP greeting
+        socketTimeout: 30000,     // 30 seconds for socket operations
         // Debug logging in development
         debug: !config.isProduction,
         logger: !config.isProduction
@@ -62,7 +67,8 @@ const createTransporter = () => {
     console.log('📧 Creating SMTP transporter with config:');
     console.log(`   Host: ${transporterConfig.host}`);
     console.log(`   Port: ${transporterConfig.port}`);
-    console.log(`   Secure: ${transporterConfig.secure}`);
+    console.log(`   Secure: ${transporterConfig.secure} (STARTTLS)`);
+    console.log(`   RequireTLS: ${transporterConfig.requireTLS}`);
     console.log(`   User: ${config.emailUser ? config.emailUser.slice(0, 3) + '***' : '(not set)'}`);
     console.log(`   Pass: ${config.emailPass ? '[SET - ' + config.emailPass.length + ' chars]' : '(not set)'}`);
 
