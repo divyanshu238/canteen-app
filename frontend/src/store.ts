@@ -5,9 +5,9 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 export interface User {
     id: string;
     name: string;
-    email: string;
-    role: 'student' | 'partner' | 'admin';
+    email?: string;
     phone?: string;
+    role: 'student' | 'partner' | 'admin';
     canteenId?: string;
     isApproved?: boolean;
 }

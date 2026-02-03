@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
-import { useDispatch } from 'react-redux';
+/**
+ * Login/Signup Page - Firebase Phone OTP Authentication
+ * 
+ * FLOW:
+ * 1. User selects Login or Register
+ * 2. User enters phone number (and name for registration)
+ * 3. Firebase sends OTP via invisible reCAPTCHA
+ * 4. Redirect to OTP verification page
+ * 
+ * NO email/password logic. Phone number is the ONLY identifier.
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { login } from '../store';
-import { authAPI } from '../api';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, ChefHat, GraduationCap } from 'lucide-react';
+import { Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Shield } from 'lucide-react';
+import { initializeRecaptcha, requestOTP, isFirebaseConfigured } from '../services/auth.service';
 
 type AuthMode = 'login' | 'register';
 type Role = 'student' | 'partner';
@@ -14,114 +24,111 @@ export const Login = () => {
     const [role, setRole] = useState<Role>('student');
 
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
+    const [phoneNumber, setPhoneNumber] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const [recaptchaReady, setRecaptchaReady] = useState(false);
 
-    const dispatch = useDispatch();
     const navigate = useNavigate();
+    const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+
+    // Initialize reCAPTCHA on mount
+    useEffect(() => {
+        if (!isFirebaseConfigured()) {
+            setError('Firebase is not configured. Please contact support.');
+            return;
+        }
+
+        // Small delay to ensure DOM is ready
+        const timer = setTimeout(() => {
+            const initialized = initializeRecaptcha('recaptcha-container');
+            setRecaptchaReady(initialized);
+            if (!initialized) {
+                setError('Failed to initialize security check. Please refresh the page.');
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, []);
+
+    // Re-initialize reCAPTCHA when mode changes
+    useEffect(() => {
+        if (isFirebaseConfigured() && recaptchaContainerRef.current) {
+            const timer = setTimeout(() => {
+                const initialized = initializeRecaptcha('recaptcha-container');
+                setRecaptchaReady(initialized);
+            }, 300);
+            return () => clearTimeout(timer);
+        }
+    }, [mode]);
+
+    const formatPhoneNumber = (value: string): string => {
+        // Remove non-digits
+        const digits = value.replace(/\D/g, '');
+
+        // Limit to 10 digits for Indian numbers
+        return digits.slice(0, 10);
+    };
+
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const formatted = formatPhoneNumber(e.target.value);
+        setPhoneNumber(formatted);
+        setError('');
+    };
+
+    const validateForm = (): boolean => {
+        if (mode === 'register' && (!name.trim() || name.trim().length < 2)) {
+            setError('Please enter your name (minimum 2 characters)');
+            return false;
+        }
+
+        if (phoneNumber.length !== 10) {
+            setError('Please enter a valid 10-digit phone number');
+            return false;
+        }
+
+        if (!recaptchaReady) {
+            setError('Security check not ready. Please wait or refresh the page.');
+            return false;
+        }
+
+        return true;
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+
+        if (!validateForm()) {
+            return;
+        }
+
         setIsLoading(true);
 
         try {
-            let response;
+            // Request OTP
+            const result = await requestOTP(phoneNumber);
 
-            if (mode === 'register') {
-                if (!name.trim()) {
-                    throw new Error('Please enter your name');
-                }
-                if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                    throw new Error('Please enter a valid email address');
-                }
-                if (password.length < 6) {
-                    throw new Error('Password must be at least 6 characters');
-                }
-
-                response = await authAPI.register({
-                    name: name.trim(),
-                    email: email.trim().toLowerCase(),
-                    password,
-                    role
-                });
-
-                // Check if EMAIL OTP verification is required (no tokens in response)
-                if (response.data.requiresOtp) {
-                    // Store verification context in sessionStorage for persistence
-                    const verificationData = {
-                        email: response.data.data.email,
-                        emailMasked: response.data.data.emailMasked,
-                        name: response.data.data.name,
-                        userId: response.data.data.userId,
-                        source: 'register' as const,
-                        verificationType: 'email' as const
-                    };
-                    sessionStorage.setItem('pendingVerification', JSON.stringify(verificationData));
-
-                    // Redirect to EMAIL OTP verification
-                    navigate('/verify-email', { state: verificationData });
-                    return;
-                }
-            } else {
-                response = await authAPI.login({
-                    email: email.trim().toLowerCase(),
-                    password
-                });
-            }
-
-            const { user, accessToken, refreshToken } = response.data.data;
-
-            dispatch(login({
-                user: {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    role: user.role,
-                    canteenId: user.canteenId,
-                    isApproved: user.isApproved
-                },
-                accessToken,
-                refreshToken
-            }));
-
-            // Redirect based on role
-            if (user.role === 'admin') {
-                navigate('/admin');
-            } else if (user.role === 'partner') {
-                navigate('/partner');
-            } else {
-                navigate('/');
-            }
-        } catch (err: any) {
-            const errorResponse = err.response?.data;
-
-            // Check for EMAIL OTP verification required (403)
-            const isOtpRequired = err.response?.status === 403 &&
-                (errorResponse?.code === 'EMAIL_OTP_REQUIRED' ||
-                    errorResponse?.requiresOtp === true);
-
-            if (isOtpRequired) {
-                // Store verification context in sessionStorage for persistence
-                const verificationData = {
-                    email: errorResponse.data.email,
-                    emailMasked: errorResponse.data.emailMasked,
-                    userId: errorResponse.data.userId,
-                    source: 'login' as const,
-                    verificationType: 'email' as const
-                };
-                sessionStorage.setItem('pendingVerification', JSON.stringify(verificationData));
-
-                // Redirect to EMAIL OTP verification
-                navigate('/verify-email', { state: verificationData });
+            if (!result.success) {
+                setError(result.error || 'Failed to send OTP');
                 return;
             }
 
-            const errorMessage = errorResponse?.error || err.message || 'Authentication failed';
-            setError(errorMessage);
+            // Store verification context
+            const verificationData = {
+                phoneNumber: `+91${phoneNumber}`,
+                phoneNumberMasked: `+91 ******${phoneNumber.slice(-4)}`,
+                name: mode === 'register' ? name.trim() : undefined,
+                role: mode === 'register' ? role : undefined,
+                action: mode
+            };
+
+            sessionStorage.setItem('pendingPhoneVerification', JSON.stringify(verificationData));
+
+            // Navigate to OTP verification page
+            navigate('/verify-phone', { state: verificationData });
+        } catch (err: any) {
+            setError(err.message || 'Failed to send OTP. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -137,6 +144,16 @@ export const Login = () => {
                 </div>
 
                 <div className="space-y-8">
+                    <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <Phone className="text-white" size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-white font-bold text-lg">Phone Verification</h3>
+                            <p className="text-orange-100">Quick and secure login with OTP</p>
+                        </div>
+                    </div>
+
                     <div className="flex items-start gap-4">
                         <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
                             <GraduationCap className="text-white" size={24} />
@@ -169,21 +186,33 @@ export const Login = () => {
                     <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
                         {/* Header */}
                         <div className="text-center mb-8">
+                            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Phone className="text-orange-600" size={32} />
+                            </div>
                             <h2 className="text-3xl font-black text-gray-900 mb-2">
                                 {mode === 'login' ? 'Welcome Back' : 'Create Account'}
                             </h2>
                             <p className="text-gray-500">
                                 {mode === 'login'
-                                    ? 'Sign in to continue ordering'
+                                    ? 'Sign in with your phone number'
                                     : 'Join the campus food revolution'
                                 }
                             </p>
                         </div>
 
+                        {/* Firebase Config Warning */}
+                        {!isFirebaseConfigured() && (
+                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-700 text-sm flex items-center gap-2">
+                                <AlertCircle size={18} />
+                                <span>Firebase configuration missing. Authentication disabled.</span>
+                            </div>
+                        )}
+
                         {/* Error Message */}
                         {error && (
-                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-                                {error}
+                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2">
+                                <AlertCircle size={18} />
+                                <span>{error}</span>
                             </div>
                         )}
 
@@ -226,7 +255,7 @@ export const Login = () => {
                             {mode === 'register' && (
                                 <div>
                                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                                        Full Name
+                                        Full Name <span className="text-red-500">*</span>
                                     </label>
                                     <div className="relative">
                                         <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
@@ -237,77 +266,49 @@ export const Login = () => {
                                             className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                                             placeholder="John Doe"
                                             required
+                                            minLength={2}
                                         />
                                     </div>
                                 </div>
                             )}
 
-                            {/* Email */}
+                            {/* Phone Number */}
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-2">
-                                    Email Address
-                                    {mode === 'register' && <span className="text-red-500 ml-1">*</span>}
+                                    Phone Number <span className="text-red-500">*</span>
                                 </label>
                                 <div className="relative">
-                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                        <span className="text-gray-600 font-medium">+91</span>
+                                    </div>
                                     <input
-                                        type="email"
-                                        value={email}
-                                        onChange={e => setEmail(e.target.value)}
-                                        className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                        placeholder="you@university.edu"
+                                        type="tel"
+                                        value={phoneNumber}
+                                        onChange={handlePhoneChange}
+                                        className="w-full pl-16 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                                        placeholder="9876543210"
                                         required
+                                        maxLength={10}
+                                        pattern="[0-9]{10}"
                                     />
                                 </div>
-                                {mode === 'register' && (
-                                    <p className="text-xs text-orange-600 mt-1 font-medium">
-                                        A verification code will be sent to this email
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Password */}
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">
-                                    Password
-                                </label>
-                                <div className="relative">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                                    <input
-                                        type={showPassword ? 'text' : 'password'}
-                                        value={password}
-                                        onChange={e => setPassword(e.target.value)}
-                                        className="w-full pl-12 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                        placeholder="••••••••"
-                                        required
-                                        minLength={6}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                    >
-                                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                    </button>
-                                </div>
-                                {mode === 'register' && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Must be at least 6 characters
-                                    </p>
-                                )}
+                                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                    <Shield size={12} />
+                                    An OTP will be sent to verify your number
+                                </p>
                             </div>
 
                             {/* Submit Button */}
                             <button
                                 type="submit"
-                                disabled={isLoading}
+                                disabled={isLoading || !recaptchaReady || !isFirebaseConfigured()}
                                 className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {isLoading ? (
                                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                 ) : (
                                     <>
-                                        {mode === 'login' ? 'Sign In' : 'Create Account'}
+                                        Send OTP
                                         <ArrowRight size={20} />
                                     </>
                                 )}
@@ -331,17 +332,15 @@ export const Login = () => {
                             </p>
                         </div>
 
-                        {/* Demo Credentials (Development Only) */}
-                        {import.meta.env.DEV && (
-                            <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                                <p className="text-xs font-bold text-gray-500 mb-2">Demo Accounts:</p>
-                                <div className="space-y-1 text-xs text-gray-500">
-                                    <p>Admin: admin@canteen.com / admin123</p>
-                                    <p>Partner: raju@canteen.com / partner123</p>
-                                    <p>Student: student@test.com / student123</p>
-                                </div>
-                            </div>
-                        )}
+                        {/* Security Notice */}
+                        <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                            <p className="text-xs text-gray-500 text-center">
+                                🔒 Protected by reCAPTCHA &amp; Firebase Authentication
+                            </p>
+                        </div>
+
+                        {/* Invisible reCAPTCHA container */}
+                        <div id="recaptcha-container" ref={recaptchaContainerRef}></div>
                     </div>
                 </div>
             </div>

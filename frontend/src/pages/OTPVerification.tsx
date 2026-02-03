@@ -1,107 +1,86 @@
+/**
+ * Phone OTP Verification Page - Firebase Phone Authentication
+ * 
+ * FLOW:
+ * 1. User arrives from Login page with OTP already sent
+ * 2. User enters 6-digit OTP
+ * 3. Firebase verifies OTP
+ * 4. On success, get Firebase ID token
+ * 5. Send token to backend for signup/login
+ * 6. Backend issues JWT and logs user in
+ * 
+ * NO email verification. Phone is the ONLY authentication method.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { login } from '../store';
-import { otpAPI } from '../api';
-import { Mail, ArrowLeft, RefreshCw, Shield, CheckCircle, AlertCircle } from 'lucide-react';
+import { verifyOTPAndAuthenticate, hasActiveOTPSession, initializeRecaptcha, requestOTP, signOut } from '../services/auth.service';
+import { Phone, ArrowLeft, RefreshCw, Shield, CheckCircle, AlertCircle } from 'lucide-react';
 
-interface PendingVerification {
-    email: string;
-    emailMasked: string;
+interface PendingPhoneVerification {
+    phoneNumber: string;
+    phoneNumberMasked: string;
     name?: string;
-    userId?: string;
-    source: 'login' | 'register';
-    verificationType: 'email';
+    role?: 'student' | 'partner';
+    action: 'login' | 'register';
 }
 
-export const EmailVerification = () => {
+export const PhoneVerification = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Get pending verification data from navigation state or sessionStorage
-    const [pendingData, setPendingData] = useState<PendingVerification | null>(null);
+    // Get pending verification data
+    const [pendingData, setPendingData] = useState<PendingPhoneVerification | null>(null);
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [isLoading, setIsLoading] = useState(false);
-    const [isSending, setIsSending] = useState(false);
+    const [isResending, setIsResending] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-    const [countdown, setCountdown] = useState(0);
-    const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+    const [countdown, setCountdown] = useState(60);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const recaptchaContainerRef = useRef<HTMLDivElement>(null);
 
     // Load pending verification data
     useEffect(() => {
-        const stateData = location.state as PendingVerification | undefined;
-        const storedData = sessionStorage.getItem('pendingVerification');
+        const stateData = location.state as PendingPhoneVerification | undefined;
+        const storedData = sessionStorage.getItem('pendingPhoneVerification');
 
-        if (stateData?.email) {
+        if (stateData?.phoneNumber) {
             setPendingData(stateData);
-            sessionStorage.setItem('pendingVerification', JSON.stringify(stateData));
+            sessionStorage.setItem('pendingPhoneVerification', JSON.stringify(stateData));
         } else if (storedData) {
             try {
-                setPendingData(JSON.parse(storedData));
+                const parsed = JSON.parse(storedData);
+                if (parsed.phoneNumber) {
+                    setPendingData(parsed);
+                } else {
+                    navigate('/login');
+                }
             } catch {
                 navigate('/login');
             }
         } else {
-            // No verification data, redirect to login
             navigate('/login');
+        }
+
+        // Check if we have an active OTP session
+        if (!hasActiveOTPSession()) {
+            // No active session, user may have refreshed
+            // They can still resend OTP
         }
     }, [location.state, navigate]);
 
-    // Send OTP on initial load (if coming from register, OTP was already sent)
-    useEffect(() => {
-        // Only auto-send for login flow (register already sent OTP)
-        if (pendingData?.email && pendingData.source === 'login' && countdown === 0) {
-            handleSendOTP();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [pendingData?.email]);
-
-    // Countdown timer for resend
+    // Countdown timer
     useEffect(() => {
         if (countdown > 0) {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
             return () => clearTimeout(timer);
         }
     }, [countdown]);
-
-    const handleSendOTP = async () => {
-        if (!pendingData?.email || isSending) return;
-
-        setIsSending(true);
-        setError('');
-
-        try {
-            const response = await otpAPI.send({
-                email: pendingData.email,
-                purpose: 'registration'
-            });
-
-            setSuccess(response.data.message || 'Verification code sent to your email');
-            setCountdown(60); // 60 second cooldown
-
-            // In development, show the OTP
-            if (response.data.data?.otp) {
-                console.log('Dev OTP:', response.data.data.otp);
-            }
-
-            // Clear success after 3 seconds
-            setTimeout(() => setSuccess(''), 3000);
-        } catch (err: any) {
-            const errorData = err.response?.data;
-            if (errorData?.waitSeconds) {
-                setCountdown(errorData.waitSeconds);
-                setError(`Please wait ${errorData.waitSeconds} seconds before resending`);
-            } else {
-                setError(errorData?.error || 'Failed to send verification code. Please try again.');
-            }
-        } finally {
-            setIsSending(false);
-        }
-    };
 
     const handleOtpChange = (index: number, value: string) => {
         // Only allow digits
@@ -142,61 +121,64 @@ export const EmailVerification = () => {
 
     const handleVerify = async (otpValue?: string) => {
         const otpCode = otpValue || otp.join('');
-        if (otpCode.length !== 6 || !pendingData?.email) return;
+        if (otpCode.length !== 6 || !pendingData) return;
 
         setIsLoading(true);
         setError('');
 
         try {
-            const response = await otpAPI.verify({
-                email: pendingData.email,
-                otp: otpCode,
-                purpose: 'registration'
-            });
+            // Convert 'register' to 'signup' for the backend API
+            const authAction = pendingData.action === 'register' ? 'signup' : 'login';
 
-            const data = response.data.data;
+            const result = await verifyOTPAndAuthenticate(
+                otpCode,
+                authAction,
+                pendingData.name,
+                pendingData.role
+            );
 
-            if (data.loginComplete && data.accessToken && data.refreshToken && data.user) {
-                // OTP verified and tokens received - complete login
-                dispatch(login({
-                    user: {
-                        id: data.user.id,
-                        name: data.user.name,
-                        email: data.user.email,
-                        role: data.user.role,
-                        canteenId: data.user.canteenId,
-                        isApproved: data.user.isApproved
-                    },
-                    accessToken: data.accessToken,
-                    refreshToken: data.refreshToken
-                }));
+            if (!result.success) {
+                setError(result.error || 'Verification failed');
+                setOtp(['', '', '', '', '', '']);
+                inputRefs.current[0]?.focus();
+                return;
+            }
 
-                // Clean up
-                sessionStorage.removeItem('pendingVerification');
+            const { user, accessToken, refreshToken } = result.data!;
 
-                // Redirect based on role
-                if (data.user.role === 'admin') {
+            // Dispatch login to Redux store
+            dispatch(login({
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: '', // No email in phone auth
+                    role: user.role,
+                    phone: user.phoneNumber,
+                    canteenId: user.canteenId,
+                    isApproved: user.isApproved
+                },
+                accessToken,
+                refreshToken
+            }));
+
+            // Clean up
+            sessionStorage.removeItem('pendingPhoneVerification');
+
+            // Show success briefly
+            setSuccess('Verification successful! Redirecting...');
+
+            // Redirect based on role
+            setTimeout(() => {
+                if (user.role === 'admin') {
                     navigate('/admin', { replace: true });
-                } else if (data.user.role === 'partner') {
+                } else if (user.role === 'partner') {
                     navigate('/partner', { replace: true });
                 } else {
                     navigate('/', { replace: true });
                 }
-            } else {
-                // Verification successful but unexpected response
-                setSuccess('Email verified! Redirecting...');
-                sessionStorage.removeItem('pendingVerification');
-                navigate('/login', { replace: true });
-            }
+            }, 500);
         } catch (err: any) {
-            const errorData = err.response?.data;
-            setError(errorData?.error || 'Verification failed. Please try again.');
-
-            if (errorData?.attemptsRemaining !== undefined) {
-                setAttemptsRemaining(errorData.attemptsRemaining);
-            }
-
-            // Clear OTP on error
+            setError(err.message || 'Verification failed. Please try again.');
             setOtp(['', '', '', '', '', '']);
             inputRefs.current[0]?.focus();
         } finally {
@@ -204,8 +186,46 @@ export const EmailVerification = () => {
         }
     };
 
-    const handleGoBack = () => {
-        sessionStorage.removeItem('pendingVerification');
+    const handleResendOTP = async () => {
+        if (!pendingData || isResending || countdown > 0) return;
+
+        setIsResending(true);
+        setError('');
+
+        try {
+            // Initialize reCAPTCHA if needed
+            initializeRecaptcha('recaptcha-container-verify');
+
+            // Wait a bit for reCAPTCHA to be ready
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Extract phone number without country code
+            const phoneDigits = pendingData.phoneNumber.replace(/\D/g, '').slice(-10);
+
+            const result = await requestOTP(phoneDigits);
+
+            if (!result.success) {
+                setError(result.error || 'Failed to resend OTP');
+                return;
+            }
+
+            setSuccess('New OTP sent successfully!');
+            setCountdown(60);
+            setOtp(['', '', '', '', '', '']);
+            inputRefs.current[0]?.focus();
+
+            // Clear success after 3 seconds
+            setTimeout(() => setSuccess(''), 3000);
+        } catch (err: any) {
+            setError(err.message || 'Failed to resend OTP');
+        } finally {
+            setIsResending(false);
+        }
+    };
+
+    const handleGoBack = async () => {
+        sessionStorage.removeItem('pendingPhoneVerification');
+        await signOut();
         navigate('/login', { replace: true });
     };
 
@@ -233,17 +253,17 @@ export const EmailVerification = () => {
                         </div>
                         <div>
                             <h3 className="text-white font-bold text-lg">Secure Verification</h3>
-                            <p className="text-orange-100">We're verifying your email to keep your account safe</p>
+                            <p className="text-orange-100">We're verifying your phone to keep your account safe</p>
                         </div>
                     </div>
 
                     <div className="flex items-start gap-4">
                         <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <Mail className="text-white" size={24} />
+                            <Phone className="text-white" size={24} />
                         </div>
                         <div>
                             <h3 className="text-white font-bold text-lg">One-Time Code</h3>
-                            <p className="text-orange-100">Enter the 6-digit code sent to your email</p>
+                            <p className="text-orange-100">Enter the 6-digit code sent to your phone</p>
                         </div>
                     </div>
                 </div>
@@ -269,16 +289,16 @@ export const EmailVerification = () => {
                         {/* Header */}
                         <div className="text-center mb-8">
                             <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Mail className="text-orange-600" size={32} />
+                                <Phone className="text-orange-600" size={32} />
                             </div>
                             <h2 className="text-3xl font-black text-gray-900 mb-2">
-                                Verify Your Email
+                                Verify Your Phone
                             </h2>
                             <p className="text-gray-500">
                                 We've sent a verification code to
                             </p>
                             <p className="text-lg font-bold text-gray-900 mt-1">
-                                {pendingData.emailMasked || pendingData.email}
+                                {pendingData.phoneNumberMasked}
                             </p>
                         </div>
 
@@ -294,14 +314,7 @@ export const EmailVerification = () => {
                         {error && (
                             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2">
                                 <AlertCircle size={18} />
-                                <div>
-                                    {error}
-                                    {attemptsRemaining !== null && attemptsRemaining > 0 && (
-                                        <p className="text-xs mt-1">
-                                            {attemptsRemaining} attempts remaining
-                                        </p>
-                                    )}
-                                </div>
+                                <div>{error}</div>
                             </div>
                         )}
 
@@ -358,11 +371,11 @@ export const EmailVerification = () => {
                                 </p>
                             ) : (
                                 <button
-                                    onClick={handleSendOTP}
-                                    disabled={isSending}
+                                    onClick={handleResendOTP}
+                                    disabled={isResending}
                                     className="text-orange-600 font-bold hover:text-orange-700 flex items-center gap-2 mx-auto disabled:opacity-50"
                                 >
-                                    {isSending ? (
+                                    {isResending ? (
                                         <div className="w-4 h-4 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
                                     ) : (
                                         <RefreshCw size={18} />
@@ -373,14 +386,22 @@ export const EmailVerification = () => {
                         </div>
 
                         {/* User Info */}
-                        <div className="mt-8 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                            <p className="text-xs font-bold text-gray-500 mb-2">Verifying for:</p>
-                            <p className="text-sm text-gray-700">
-                                {pendingData.name && <span className="font-bold">{pendingData.name}</span>}
-                                {pendingData.name && ' • '}
-                                {pendingData.email}
-                            </p>
-                        </div>
+                        {pendingData.name && (
+                            <div className="mt-8 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                                <p className="text-xs font-bold text-gray-500 mb-2">Registering as:</p>
+                                <p className="text-sm text-gray-700">
+                                    <span className="font-bold">{pendingData.name}</span>
+                                    {pendingData.role && (
+                                        <span className="ml-2 text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded-full capitalize">
+                                            {pendingData.role}
+                                        </span>
+                                    )}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Invisible reCAPTCHA container for resend */}
+                        <div id="recaptcha-container-verify" ref={recaptchaContainerRef}></div>
                     </div>
                 </div>
             </div>
@@ -388,5 +409,6 @@ export const EmailVerification = () => {
     );
 };
 
-// Also export as OTPVerification for backward compatibility with routes
-export const OTPVerification = EmailVerification;
+// Export both names for compatibility
+export const EmailVerification = PhoneVerification;
+export const OTPVerification = PhoneVerification;

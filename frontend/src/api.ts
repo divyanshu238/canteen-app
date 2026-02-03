@@ -50,28 +50,6 @@ api.interceptors.response.use(
                         return api(originalRequest);
                     }
                 } catch (refreshError: any) {
-                    // Check if refresh was blocked due to OTP requirement
-                    const isOtpRequired = refreshError.response?.status === 403 &&
-                        (refreshError.response?.data?.code === 'OTP_REQUIRED' ||
-                            refreshError.response?.data?.requiresOtp === true);
-
-                    if (isOtpRequired) {
-                        // Store verification context and redirect
-                        const data = refreshError.response.data.data;
-                        sessionStorage.setItem('pendingVerification', JSON.stringify({
-                            email: data?.email,
-                            emailMasked: data?.emailMasked,
-                            userId: data?.userId,
-                            source: 'session',
-                            verificationType: 'email'
-                        }));
-                        localStorage.removeItem('token');
-                        localStorage.removeItem('refreshToken');
-                        localStorage.removeItem('user');
-                        window.location.href = '/verify-email';
-                        return Promise.reject(refreshError);
-                    }
-
                     // Refresh failed, logout user
                     localStorage.removeItem('token');
                     localStorage.removeItem('refreshToken');
@@ -91,13 +69,10 @@ api.interceptors.response.use(
     }
 );
 
-// Auth API
+// Auth API - Firebase Phone OTP based
 export const authAPI = {
-    register: (data: { name: string; email: string; password: string; role?: string }) =>
-        api.post('/auth/register', data),
-
-    login: (data: { email: string; password: string }) =>
-        api.post('/auth/login', data),
+    // Login and signup are handled by Firebase + auth.service.ts
+    // These are kept for token refresh and session management
 
     logout: (refreshToken?: string) =>
         api.post('/auth/logout', { refreshToken }),
@@ -108,26 +83,8 @@ export const authAPI = {
     getMe: () =>
         api.get('/auth/me'),
 
-    updateProfile: (data: { name?: string; phone?: string }) =>
+    updateProfile: (data: { name?: string }) =>
         api.put('/auth/profile', data),
-
-    changePassword: (data: { currentPassword: string; newPassword: string }) =>
-        api.put('/auth/password', data),
-};
-
-// OTP API - EMAIL ONLY
-export const otpAPI = {
-    send: (data: { email: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
-        api.post('/otp/send', data),
-
-    verify: (data: { email: string; otp: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
-        api.post('/otp/verify', data),
-
-    resend: (data: { email: string; purpose?: 'registration' | 'login' | 'password_reset' }) =>
-        api.post('/otp/resend', data),
-
-    getStatus: () =>
-        api.get('/otp/status'),
 };
 
 // Canteen API
@@ -258,7 +215,7 @@ export const adminAPI = {
     getAnalytics: () =>
         api.get('/admin/analytics'),
 
-    setupAdmin: (data: { name: string; email: string; password: string }) =>
+    setupAdmin: (data: { name: string; phoneNumber: string }) =>
         api.post('/admin/setup', data),
 };
 

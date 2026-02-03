@@ -12,7 +12,7 @@ import { SearchResultsPage } from './pages/SearchResultsPage';
 import { Cart } from './pages/Cart';
 import { OrderTracking } from './pages/OrderTracking';
 import { Login } from './pages/Login';
-import { EmailVerification } from './pages/OTPVerification';
+import { PhoneVerification } from './pages/OTPVerification';
 import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import './index.css';
@@ -52,8 +52,12 @@ ReactDOM.createRoot(rootElement).render(
                         <Route path="/search" element={<SearchResultsPage />} />
                         <Route path="/cart" element={<Cart />} />
                         <Route path="/login" element={<Login />} />
-                        <Route path="/verify-email" element={<EmailVerification />} />
-                        <Route path="/verify-phone" element={<EmailVerification />} /> {/* Backward compat */}
+
+                        {/* Phone OTP Verification */}
+                        <Route path="/verify-phone" element={<PhoneVerification />} />
+
+                        {/* Legacy routes - redirect to phone verification */}
+                        <Route path="/verify-email" element={<Navigate to="/verify-phone" replace />} />
 
                         {/* Protected Routes */}
                         <Route path="/order/:id" element={
