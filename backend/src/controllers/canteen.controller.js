@@ -24,12 +24,11 @@ const VALID_CATEGORIES = [
 /**
  * Normalize category for case-insensitive matching
  * @param {string} category - Raw category input
- * @returns {RegExp} - Case-insensitive regex for MongoDB query
+ * @returns {string} - Escaped string safe for regex
  */
-const createCategoryRegex = (category) => {
-    // Escape special regex characters and create case-insensitive pattern
-    const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^${escaped}$`, 'i');
+const escapeRegexString = (category) => {
+    // Escape special regex characters for safe pattern matching
+    return category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
 /**
@@ -142,6 +141,8 @@ export const getCanteenMenu = async (req, res, next) => {
  * 2. Groups items by canteen
  * 3. Returns only canteens that have items in that category
  * 4. Each canteen includes ONLY the filtered items, not their full menu
+ * 
+ * IMPORTANT: Uses MongoDB $regex operator (not JavaScript RegExp) for aggregation
  */
 export const getCanteensByCategory = async (req, res, next) => {
     try {
@@ -155,18 +156,23 @@ export const getCanteensByCategory = async (req, res, next) => {
             });
         }
 
-        const normalizedCategory = category.trim().toLowerCase();
+        const normalizedCategory = category.trim();
 
-        // Create case-insensitive regex for category matching
-        const categoryRegex = createCategoryRegex(normalizedCategory);
+        // Escape special regex characters for MongoDB $regex
+        // CRITICAL: Must use MongoDB $regex operator, NOT JavaScript RegExp object
+        const escapedCategory = escapeRegexString(normalizedCategory);
 
         // Step 1: Find all menu items in this category that are in stock
         // Using aggregation for better performance and to avoid N+1 queries
         const results = await MenuItem.aggregate([
             // Match items in the requested category that are in stock
+            // CRITICAL FIX: Use MongoDB $regex operator, not JS RegExp
             {
                 $match: {
-                    category: categoryRegex,
+                    category: {
+                        $regex: `^${escapedCategory}$`,
+                        $options: 'i'  // Case-insensitive
+                    },
                     inStock: true
                 }
             },

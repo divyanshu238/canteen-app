@@ -22,6 +22,8 @@ const escapeRegex = (str) => {
  * - Have menu items matching the query
  * 
  * For each canteen, only matching items are included.
+ * 
+ * CRITICAL: Uses MongoDB $regex operator for aggregation, NOT JavaScript RegExp objects
  */
 export const search = async (req, res, next) => {
     try {
@@ -58,9 +60,8 @@ export const search = async (req, res, next) => {
             });
         }
 
-        // Create case-insensitive regex for partial matching
+        // Escape special regex characters for MongoDB $regex operator
         const escapedQuery = escapeRegex(query);
-        const searchRegex = new RegExp(escapedQuery, 'i');
 
         // STRATEGY: 
         // 1. Find all menu items matching the query (from open, approved canteens)
@@ -68,11 +69,12 @@ export const search = async (req, res, next) => {
         // 3. Combine and return grouped results
 
         // Step 1: Find matching menu items with their canteens
+        // CRITICAL: Use MongoDB $regex operator, NOT JavaScript RegExp for aggregation
         const matchingItemsAggregation = await MenuItem.aggregate([
             // Match items by name (partial, case-insensitive)
             {
                 $match: {
-                    name: searchRegex,
+                    name: { $regex: escapedQuery, $options: 'i' },
                     inStock: true
                 }
             },
@@ -148,7 +150,9 @@ export const search = async (req, res, next) => {
         ]);
 
         // Step 2: Find canteens matching by name (that weren't already found via items)
+        // Using Mongoose .find() which correctly handles JavaScript RegExp
         const foundCanteenIds = matchingItemsAggregation.map(r => r.canteen._id.toString());
+        const searchRegex = new RegExp(escapedQuery, 'i');
 
         const matchingCanteens = await Canteen.find({
             name: searchRegex,
@@ -213,6 +217,8 @@ export const search = async (req, res, next) => {
  * GET /api/search/suggestions?q=piz
  * 
  * Returns quick suggestions for search autocomplete
+ * 
+ * Note: Uses Mongoose .find() which correctly handles JavaScript RegExp
  */
 export const searchSuggestions = async (req, res, next) => {
     try {
@@ -227,6 +233,7 @@ export const searchSuggestions = async (req, res, next) => {
 
         const query = q.trim();
         const escapedQuery = escapeRegex(query);
+        // Mongoose .find() correctly converts JavaScript RegExp to MongoDB query
         const searchRegex = new RegExp(escapedQuery, 'i');
 
         // Get unique item names matching the query
