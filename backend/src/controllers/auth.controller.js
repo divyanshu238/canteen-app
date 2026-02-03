@@ -1,35 +1,34 @@
 /**
- * Authentication Controller - EMAIL-ONLY OTP VERIFICATION
+ * Authentication Controller - FIREBASE PHONE OTP ONLY
  * 
- * SECURITY-CRITICAL: All token issuance paths use mustVerifyEmailOtp()
+ * SECURITY-CRITICAL: Phone number is the ONLY authentication identifier
  * 
- * RULES (ZERO EXCEPTIONS):
- * 1. Register: Create user → Send OTP email → NO tokens
- * 2. Login: Check email verified → If not → 403 EMAIL_OTP_REQUIRED → NO tokens
- * 3. Refresh: Check email verified → If not → 403 EMAIL_OTP_REQUIRED → Revoke tokens
- * 4. Password Change: Check email verified → If not → Block
- * 5. ONLY after OTP verification → issue tokens
+ * ARCHITECTURE:
+ * 1. Backend NEVER generates or sends OTPs
+ * 2. Firebase handles all OTP delivery and verification
+ * 3. Backend ONLY verifies Firebase ID tokens
+ * 4. Phone number is MANDATORY and UNIQUE
  * 
- * ZERO phone references. ZERO SMS. ZERO fallbacks.
+ * FLOWS:
+ * - Signup: Firebase token → Extract phone → Create user if phone unique → Issue JWT
+ * - Login: Firebase token → Extract phone → Find user → Issue JWT
+ * 
+ * ZERO email logic. ZERO SMS in backend. ZERO OTP generation.
  */
 
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
 import config from '../config/index.js';
-import { User, RefreshToken, Canteen, OTP } from '../models/index.js';
-import { AppError } from '../middleware/error.js';
-import { mustVerifyEmailOtp, formatEmailOtpRequiredResponse, maskEmail } from '../utils/auth.utils.js';
-import { sendOTPEmail } from '../services/email.service.js';
+import { User, RefreshToken, Canteen } from '../models/index.js';
 
 /**
- * Generate JWT tokens
- * Exported for use in OTP flow after verification
+ * Generate JWT tokens (for session management AFTER Firebase auth)
  */
 export const generateTokens = async (user) => {
     const accessToken = jwt.sign(
         {
             id: user._id,
             role: user.role,
+            phoneNumber: user.phoneNumber,
             canteenId: user.canteenId
         },
         config.jwtSecret,
@@ -56,67 +55,108 @@ export const generateTokens = async (user) => {
 };
 
 /**
- * Format user response
- * Exported for use in OTP flow after verification
+ * Format user response (exclude sensitive fields)
  */
 export const formatUserResponse = (user) => ({
     id: user._id.toString(),
     name: user.name,
-    email: user.email,
+    phoneNumber: user.phoneNumber,
+    firebaseUid: user.firebaseUid,
     role: user.role,
     canteenId: user.canteenId?.toString(),
     isApproved: user.isApproved,
-    isEmailVerified: user.isEmailVerified,
-    emailVerifiedAt: user.emailVerifiedAt,
+    isPhoneVerified: user.isPhoneVerified,
     createdAt: user.createdAt
 });
 
 /**
- * Register new user
- * POST /api/auth/register
+ * Mask phone number for logging (e.g., +91****1234)
+ */
+const maskPhone = (phone) => {
+    if (!phone || phone.length < 6) return '***';
+    return phone.slice(0, 3) + '****' + phone.slice(-4);
+};
+
+/**
+ * Signup with Firebase Phone OTP
+ * POST /api/auth/signup
  * 
  * FLOW:
- * 1. Create user (isEmailVerified = false)
- * 2. Generate OTP
- * 3. Send OTP to email
- * 4. Return success with requiresOtp: true
- * 5. DO NOT issue any tokens
+ * 1. Receive Firebase ID token (already verified by middleware)
+ * 2. Extract phone_number and uid from token
+ * 3. Check if phone number already exists
+ * 4. Create new user with phone as unique identifier
+ * 5. Issue JWT tokens for session management
+ * 
+ * Headers: Authorization: Bearer <firebase_id_token>
+ * Body: { name: string, role?: 'student' | 'partner' }
  */
-export const register = async (req, res, next) => {
+export const signup = async (req, res, next) => {
     try {
-        const { name, email, password, role = 'student' } = req.body;
+        const { name, role = 'student' } = req.body;
+        const { firebaseUser } = req;
+
+        // Extract from verified Firebase token
+        const phoneNumber = firebaseUser.phone_number;
+        const firebaseUid = firebaseUser.uid;
 
         // Validate required fields
-        if (!name || !email || !password) {
+        if (!name || name.trim().length < 2) {
             return res.status(400).json({
                 success: false,
-                error: 'Name, email, and password are required'
+                error: 'Name is required (minimum 2 characters)',
+                code: 'NAME_REQUIRED'
             });
         }
 
-        // Check if user exists
-        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        // Phone number is REQUIRED (validated by middleware, but double-check)
+        if (!phoneNumber) {
+            console.error(`❌ SIGNUP BLOCKED: No phone number in Firebase token (uid: ${firebaseUid})`);
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number is required for signup',
+                code: 'PHONE_REQUIRED'
+            });
+        }
+
+        console.log(`📱 SIGNUP ATTEMPT: ${maskPhone(phoneNumber)} (Firebase UID: ${firebaseUid})`);
+
+        // Check if phone number already exists
+        const existingUser = await User.findOne({ phoneNumber });
         if (existingUser) {
-            return res.status(400).json({
+            console.log(`❌ SIGNUP BLOCKED: Phone already registered: ${maskPhone(phoneNumber)}`);
+            return res.status(409).json({
                 success: false,
-                error: 'Email already registered'
+                error: 'Phone number is already registered. Please login instead.',
+                code: 'PHONE_ALREADY_REGISTERED'
             });
         }
 
-        // Create user - ALWAYS unverified initially
+        // Check if Firebase UID already exists (prevent multiple accounts)
+        const existingFirebaseUser = await User.findOne({ firebaseUid });
+        if (existingFirebaseUser) {
+            console.log(`❌ SIGNUP BLOCKED: Firebase UID already registered: ${firebaseUid}`);
+            return res.status(409).json({
+                success: false,
+                error: 'This account is already registered. Please login instead.',
+                code: 'FIREBASE_UID_ALREADY_REGISTERED'
+            });
+        }
+
+        // Create user
         const userData = {
             name: name.trim(),
-            email: email.toLowerCase().trim(),
-            password,
+            phoneNumber: phoneNumber,
+            firebaseUid: firebaseUid,
             role: ['student', 'partner'].includes(role) ? role : 'student',
-            isApproved: role !== 'partner', // Partners need approval
-            isEmailVerified: false  // ALWAYS false on registration
+            isApproved: role !== 'partner', // Partners need admin approval
+            isPhoneVerified: true // Already verified by Firebase
         };
 
         const user = await User.create(userData);
-        console.log(`✅ User created: ${maskEmail(user.email)} (ID: ${user._id})`);
+        console.log(`✅ User created: ${maskPhone(phoneNumber)} (ID: ${user._id}, Role: ${user.role})`);
 
-        // If partner, create a placeholder canteen
+        // If partner, create placeholder canteen
         if (role === 'partner') {
             const canteen = await Canteen.create({
                 name: `${name}'s Kitchen`,
@@ -129,157 +169,104 @@ export const register = async (req, res, next) => {
 
             user.canteenId = canteen._id;
             await user.save();
+            console.log(`📦 Canteen created for partner: ${canteen._id}`);
         }
 
-        // ============================================
-        // SEND OTP EMAIL (if email verification is enabled)
-        // ============================================
-        if (config.requireEmailVerification) {
-            // Generate OTP
-            const otpCode = OTP.generateOTP(config.otpLength);
-            const otpHash = await OTP.hashOTP(otpCode);
-
-            console.log(`🔐 OTP GENERATED for ${maskEmail(user.email)} (purpose: registration)`);
-
-            // Invalidate any old OTPs for this email
-            await OTP.updateMany(
-                { email: user.email, purpose: 'registration', isUsed: false },
-                { isUsed: true }
-            );
-
-            // Create new OTP record
-            await OTP.create({
-                email: user.email,
-                otpHash,
-                purpose: 'registration',
-                userId: user._id,
-                expiresAt: new Date(Date.now() + config.otpExpiryMinutes * 60 * 1000),
-                maxAttempts: config.otpMaxAttempts
-            });
-
-            // Send OTP via email
-            console.log(`📤 SENDING OTP EMAIL to ${maskEmail(user.email)}`);
-            const emailResult = await sendOTPEmail(user.email, otpCode, 'registration');
-
-            let emailSent = true;
-            if (!emailResult.success) {
-                console.error(`❌ OTP EMAIL FAILED: ${emailResult.error}`);
-                console.error(`   ErrorCode: ${emailResult.errorCode || 'N/A'}`);
-                console.error(`   ErrorDetails: ${emailResult.errorDetails || 'N/A'}`);
-                emailSent = false;
-
-                // Invalidate the OTP record since email was not sent
-                await OTP.updateMany(
-                    { email: user.email, purpose: 'registration', isUsed: false },
-                    { isUsed: true }
-                );
-                console.log(`🗑️ OTP record invalidated (email delivery failed)`);
-            } else {
-                console.log(`✅ OTP EMAIL SENT to ${maskEmail(user.email)}`);
-                console.log(`   MessageId: ${emailResult.messageId || 'N/A'}`);
-            }
-
-            // Return success but NO TOKENS
-            return res.status(201).json({
-                success: true,
-                requiresOtp: true,
-                verificationType: 'email',
-                message: emailSent
-                    ? 'Account created. Please check your email for the verification code.'
-                    : 'Account created but verification email failed. Please request a new code.',
-                emailSent: emailSent,
-                data: {
-                    userId: user._id.toString(),
-                    email: user.email,
-                    emailMasked: maskEmail(user.email),
-                    name: user.name
-                }
-            });
-        }
-
-        // ============================================
-        // EMAIL VERIFICATION DISABLED - Issue tokens directly
-        // This should NOT happen in production
-        // ============================================
-        console.warn('⚠️ WARNING: Email verification is DISABLED. Issuing tokens without verification.');
+        // Generate JWT tokens for session
         const tokens = await generateTokens(user);
+        console.log(`🔑 Tokens issued for: ${maskPhone(phoneNumber)}`);
 
         res.status(201).json({
             success: true,
+            message: 'Account created successfully',
             data: {
                 user: formatUserResponse(user),
                 ...tokens
             }
         });
     } catch (error) {
+        console.error('❌ SIGNUP ERROR:', error.message);
         next(error);
     }
 };
 
 /**
- * Login user
+ * Login with Firebase Phone OTP
  * POST /api/auth/login
  * 
  * FLOW:
- * 1. Validate credentials
- * 2. Check mustVerifyEmailOtp()
- * 3. If not verified → 403 EMAIL_OTP_REQUIRED → NO tokens
- * 4. If verified → Issue tokens
+ * 1. Receive Firebase ID token (already verified by middleware)
+ * 2. Extract phone_number from token
+ * 3. Find user by phone number
+ * 4. Issue JWT tokens for session management
+ * 
+ * Headers: Authorization: Bearer <firebase_id_token>
  */
 export const login = async (req, res, next) => {
     try {
-        const { email, password } = req.body;
+        const { firebaseUser } = req;
 
-        // Find user with password
-        const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-        if (!user) {
-            return res.status(401).json({
+        // Extract from verified Firebase token
+        const phoneNumber = firebaseUser.phone_number;
+        const firebaseUid = firebaseUser.uid;
+
+        // Phone number is REQUIRED
+        if (!phoneNumber) {
+            console.error(`❌ LOGIN BLOCKED: No phone number in Firebase token (uid: ${firebaseUid})`);
+            return res.status(400).json({
                 success: false,
-                error: 'Invalid email or password'
+                error: 'Phone number is required for login',
+                code: 'PHONE_REQUIRED'
             });
         }
 
-        // Check password
-        const isMatch = await user.comparePassword(password);
-        if (!isMatch) {
-            return res.status(401).json({
+        console.log(`📱 LOGIN ATTEMPT: ${maskPhone(phoneNumber)}`);
+
+        // Find user by phone number
+        const user = await User.findOne({ phoneNumber });
+
+        if (!user) {
+            console.log(`❌ LOGIN BLOCKED: User not found: ${maskPhone(phoneNumber)}`);
+            return res.status(404).json({
                 success: false,
-                error: 'Invalid email or password'
+                error: 'No account found with this phone number. Please signup first.',
+                code: 'USER_NOT_FOUND'
             });
         }
 
         // Check if user is active
         if (!user.isActive) {
-            return res.status(401).json({
+            console.log(`❌ LOGIN BLOCKED: Account deactivated: ${maskPhone(phoneNumber)}`);
+            return res.status(403).json({
                 success: false,
-                error: 'Account is deactivated. Please contact support.'
+                error: 'Account is deactivated. Please contact support.',
+                code: 'ACCOUNT_DEACTIVATED'
             });
         }
 
-        // ============================================
-        // SECURITY: Single source of truth for OTP check
-        // ============================================
-        const otpCheck = mustVerifyEmailOtp(user, 'login');
-
-        if (!otpCheck.canIssueTokens) {
-            // DO NOT issue tokens - user must verify email first
-            console.log(`🔒 LOGIN BLOCKED: ${otpCheck.reason}`);
-            return res.status(403).json(formatEmailOtpRequiredResponse(user));
+        // Update Firebase UID if changed (optional: for security, you might want to reject this)
+        if (user.firebaseUid !== firebaseUid) {
+            console.warn(`⚠️ Firebase UID mismatch for ${maskPhone(phoneNumber)}: stored=${user.firebaseUid}, received=${firebaseUid}`);
+            // For strict security, you could reject this login
+            // For now, we update it (user may have re-registered on Firebase)
+            user.firebaseUid = firebaseUid;
+            await user.save();
         }
 
-        // ============================================
-        // SUCCESS: User is verified - issue tokens
-        // ============================================
+        // Generate JWT tokens
         const tokens = await generateTokens(user);
+        console.log(`✅ LOGIN SUCCESS: ${maskPhone(phoneNumber)} (ID: ${user._id})`);
 
         res.json({
             success: true,
+            message: 'Login successful',
             data: {
                 user: formatUserResponse(user),
                 ...tokens
             }
         });
     } catch (error) {
+        console.error('❌ LOGIN ERROR:', error.message);
         next(error);
     }
 };
@@ -287,9 +274,6 @@ export const login = async (req, res, next) => {
 /**
  * Refresh access token
  * POST /api/auth/refresh
- * 
- * SECURITY: Also checks email verification status
- * If user's email is not verified, revoke all tokens and require OTP
  */
 export const refreshToken = async (req, res, next) => {
     try {
@@ -298,7 +282,8 @@ export const refreshToken = async (req, res, next) => {
         if (!token) {
             return res.status(400).json({
                 success: false,
-                error: 'Refresh token is required'
+                error: 'Refresh token is required',
+                code: 'REFRESH_TOKEN_REQUIRED'
             });
         }
 
@@ -309,7 +294,8 @@ export const refreshToken = async (req, res, next) => {
         } catch (error) {
             return res.status(401).json({
                 success: false,
-                error: 'Invalid or expired refresh token'
+                error: 'Invalid or expired refresh token',
+                code: 'INVALID_REFRESH_TOKEN'
             });
         }
 
@@ -324,7 +310,8 @@ export const refreshToken = async (req, res, next) => {
         if (!storedToken) {
             return res.status(401).json({
                 success: false,
-                error: 'Refresh token is invalid or revoked'
+                error: 'Refresh token is invalid or revoked',
+                code: 'TOKEN_REVOKED'
             });
         }
 
@@ -333,31 +320,16 @@ export const refreshToken = async (req, res, next) => {
         if (!user || !user.isActive) {
             return res.status(401).json({
                 success: false,
-                error: 'User not found or inactive'
+                error: 'User not found or inactive',
+                code: 'USER_INACTIVE'
             });
         }
 
-        // ============================================
-        // SECURITY: Single source of truth for OTP check
-        // ============================================
-        const otpCheck = mustVerifyEmailOtp(user, 'refresh');
-
-        if (!otpCheck.canIssueTokens) {
-            // Revoke ALL tokens for this user - they must verify OTP
-            console.log(`🔒 REFRESH BLOCKED: ${otpCheck.reason}`);
-            await RefreshToken.updateMany(
-                { userId: user._id },
-                { isRevoked: true }
-            );
-
-            return res.status(403).json(formatEmailOtpRequiredResponse(user));
-        }
-
-        // Revoke old refresh token
+        // Revoke old refresh token (rotation)
         storedToken.isRevoked = true;
         await storedToken.save();
 
-        // Generate new tokens (only for verified users)
+        // Generate new tokens
         const tokens = await generateTokens(user);
 
         res.json({
@@ -378,18 +350,17 @@ export const refreshToken = async (req, res, next) => {
  */
 export const logout = async (req, res, next) => {
     try {
-        const { refreshToken: token } = req.body;
+        const { refreshToken: token, logoutAll } = req.body;
 
         if (token) {
-            // Revoke the refresh token
             await RefreshToken.updateOne(
                 { token },
                 { isRevoked: true }
             );
         }
 
-        // Revoke all tokens for the user if requested
-        if (req.body.logoutAll && req.user) {
+        // Revoke all tokens if requested
+        if (logoutAll && req.user) {
             await RefreshToken.updateMany(
                 { userId: req.user._id },
                 { isRevoked: true }
@@ -413,6 +384,13 @@ export const getMe = async (req, res, next) => {
     try {
         const user = await User.findById(req.user._id);
 
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
         res.json({
             success: true,
             data: formatUserResponse(user)
@@ -431,7 +409,16 @@ export const updateProfile = async (req, res, next) => {
         const { name } = req.body;
 
         const updates = {};
-        if (name) updates.name = name.trim();
+        if (name && name.trim().length >= 2) {
+            updates.name = name.trim();
+        }
+
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'No valid updates provided'
+            });
+        }
 
         const user = await User.findByIdAndUpdate(
             req.user._id,
@@ -448,94 +435,13 @@ export const updateProfile = async (req, res, next) => {
     }
 };
 
-/**
- * Change password
- * PUT /api/auth/password
- * 
- * SECURITY: Also checks email verification status
- */
-export const changePassword = async (req, res, next) => {
-    try {
-        const { currentPassword, newPassword } = req.body;
-
-        if (!currentPassword || !newPassword) {
-            return res.status(400).json({
-                success: false,
-                error: 'Current password and new password are required'
-            });
-        }
-
-        if (newPassword.length < 6) {
-            return res.status(400).json({
-                success: false,
-                error: 'New password must be at least 6 characters'
-            });
-        }
-
-        // Get user with password
-        const user = await User.findById(req.user._id).select('+password');
-
-        // Verify current password
-        const isMatch = await user.comparePassword(currentPassword);
-        if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                error: 'Current password is incorrect'
-            });
-        }
-
-        // Update password
-        user.password = newPassword;
-        await user.save();
-
-        // Revoke all refresh tokens (force re-login on all devices)
-        await RefreshToken.updateMany(
-            { userId: user._id },
-            { isRevoked: true }
-        );
-
-        // ============================================
-        // SECURITY: Check OTP before issuing new tokens
-        // ============================================
-        const otpCheck = mustVerifyEmailOtp(user, 'password_change');
-
-        if (!otpCheck.canIssueTokens) {
-            // Password changed but NO tokens - user must verify OTP
-            console.log(`🔒 PASSWORD CHANGE - TOKENS BLOCKED: ${otpCheck.reason}`);
-            return res.status(200).json({
-                success: true,
-                message: 'Password changed. Please verify your email to continue.',
-                requiresOtp: true,
-                verificationType: 'email',
-                data: {
-                    userId: user._id.toString(),
-                    email: user.email,
-                    emailMasked: maskEmail(user.email)
-                }
-            });
-        }
-
-        // Generate new tokens (only for verified users)
-        const tokens = await generateTokens(user);
-
-        res.json({
-            success: true,
-            message: 'Password changed successfully',
-            data: tokens
-        });
-    } catch (error) {
-        next(error);
-    }
-};
-
 export default {
-    register,
+    signup,
     login,
     refreshToken,
     logout,
     getMe,
     updateProfile,
-    changePassword,
     generateTokens,
     formatUserResponse
 };

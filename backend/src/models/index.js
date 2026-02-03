@@ -1,8 +1,7 @@
 import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
 
 // =====================
-// USER SCHEMA
+// USER SCHEMA - PHONE-BASED AUTHENTICATION
 // =====================
 const userSchema = new mongoose.Schema({
     name: {
@@ -12,29 +11,28 @@ const userSchema = new mongoose.Schema({
         minlength: [2, 'Name must be at least 2 characters'],
         maxlength: [50, 'Name cannot exceed 50 characters']
     },
-    email: {
+    // ============================================
+    // PHONE NUMBER - PRIMARY IDENTIFIER
+    // Firebase handles OTP verification
+    // ============================================
+    phoneNumber: {
         type: String,
-        required: [true, 'Email is required'],
+        required: [true, 'Phone number is required'],
         unique: true,
-        lowercase: true,
         trim: true,
-        match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+        match: [/^\+[1-9]\d{6,14}$/, 'Phone number must be in E.164 format (e.g., +919876543210)'],
+        index: true
     },
-    password: {
+    firebaseUid: {
         type: String,
-        required: [true, 'Password is required'],
-        minlength: [6, 'Password must be at least 6 characters'],
-        select: false // Don't include by default in queries
+        required: [true, 'Firebase UID is required'],
+        unique: true,
+        trim: true,
+        index: true
     },
-    // ============================================
-    // EMAIL VERIFICATION - NO PHONE FIELDS
-    // ============================================
-    isEmailVerified: {
+    isPhoneVerified: {
         type: Boolean,
-        default: false
-    },
-    emailVerifiedAt: {
-        type: Date
+        default: true // Always true since Firebase verifies before we get the token
     },
     role: {
         type: String,
@@ -52,10 +50,6 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true // Partners need approval, students are auto-approved
     },
-    refreshToken: {
-        type: String,
-        select: false
-    },
     canteenId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Canteen'
@@ -66,27 +60,14 @@ const userSchema = new mongoose.Schema({
     toObject: { virtuals: true }
 });
 
-// Index for faster lookups
-userSchema.index({ email: 1 });
+// Indexes for faster lookups
+userSchema.index({ phoneNumber: 1 });
+userSchema.index({ firebaseUid: 1 });
 userSchema.index({ role: 1, isActive: 1 });
-
-// Hash password before saving
-userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-    this.password = await bcrypt.hash(this.password, 12);
-    next();
-});
-
-// Compare password method
-userSchema.methods.comparePassword = async function (candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
-};
 
 // Transform output (remove sensitive fields)
 userSchema.methods.toJSON = function () {
     const obj = this.toObject();
-    delete obj.password;
-    delete obj.refreshToken;
     delete obj.__v;
     return obj;
 };
@@ -387,148 +368,14 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
 
 // =====================
-// OTP SCHEMA - EMAIL ONLY
+// NOTE: OTP SCHEMA REMOVED
+// Firebase handles all OTP logic
 // =====================
-const otpSchema = new mongoose.Schema({
-    // EMAIL is the ONLY identifier - NO phone field
-    email: {
-        type: String,
-        required: [true, 'Email is required'],
-        lowercase: true,
-        trim: true,
-        match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email'],
-        index: true
-    },
-    otpHash: {
-        type: String,
-        required: [true, 'OTP hash is required'],
-        select: false // Don't include in queries by default
-    },
-    purpose: {
-        type: String,
-        enum: ['registration', 'login', 'password_reset'],
-        default: 'registration'
-    },
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        index: true
-    },
-    attempts: {
-        type: Number,
-        default: 0,
-        max: [5, 'Maximum verification attempts exceeded']
-    },
-    maxAttempts: {
-        type: Number,
-        default: 5
-    },
-    isUsed: {
-        type: Boolean,
-        default: false
-    },
-    expiresAt: {
-        type: Date,
-        required: true,
-        default: () => new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
-    },
-    lastResendAt: {
-        type: Date,
-        default: Date.now
-    },
-    resendCount: {
-        type: Number,
-        default: 0,
-        max: [5, 'Maximum resend attempts exceeded']
-    }
-}, {
-    timestamps: true
-});
-
-// Compound indexes for efficient queries - EMAIL based
-otpSchema.index({ email: 1, purpose: 1, isUsed: 1 });
-otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // Auto-cleanup expired OTPs
-
-// Static method to generate OTP
-otpSchema.statics.generateOTP = function (length = 6) {
-    let otp = '';
-    for (let i = 0; i < length; i++) {
-        otp += Math.floor(Math.random() * 10);
-    }
-    return otp;
-};
-
-// Static method to hash OTP (using bcrypt for security)
-otpSchema.statics.hashOTP = async function (otp) {
-    return await bcrypt.hash(otp, 10);
-};
-
-// Method to verify OTP
-otpSchema.methods.verifyOTP = async function (candidateOTP) {
-    // Check if already used
-    if (this.isUsed) {
-        return { valid: false, error: 'OTP has already been used' };
-    }
-
-    // Check if expired
-    if (new Date() > this.expiresAt) {
-        return { valid: false, error: 'OTP has expired' };
-    }
-
-    // Check attempt limit
-    if (this.attempts >= this.maxAttempts) {
-        return { valid: false, error: 'Maximum verification attempts exceeded. Request a new OTP.' };
-    }
-
-    // Increment attempts
-    this.attempts += 1;
-    await this.save();
-
-    // Get the document with otpHash
-    const otpDoc = await this.constructor.findById(this._id).select('+otpHash');
-
-    // Verify OTP
-    const isMatch = await bcrypt.compare(candidateOTP, otpDoc.otpHash);
-
-    if (!isMatch) {
-        return {
-            valid: false,
-            error: `Invalid OTP. ${this.maxAttempts - this.attempts} attempts remaining.`,
-            attemptsRemaining: this.maxAttempts - this.attempts
-        };
-    }
-
-    // Mark as used
-    this.isUsed = true;
-    await this.save();
-
-    return { valid: true };
-};
-
-// Method to check if can resend
-otpSchema.methods.canResend = function (cooldownSeconds = 60) {
-    const cooldownMs = cooldownSeconds * 1000;
-    const timeSinceLastResend = Date.now() - this.lastResendAt.getTime();
-
-    if (timeSinceLastResend < cooldownMs) {
-        const waitSeconds = Math.ceil((cooldownMs - timeSinceLastResend) / 1000);
-        return { canResend: false, waitSeconds };
-    }
-
-    if (this.resendCount >= 5) {
-        return { canResend: false, error: 'Maximum resend attempts exceeded. Please try again later.' };
-    }
-
-    return { canResend: true };
-};
-
-export const OTP = mongoose.model('OTP', otpSchema);
 
 export default {
     User,
     Canteen,
     MenuItem,
     Order,
-    RefreshToken,
-    OTP
+    RefreshToken
 };

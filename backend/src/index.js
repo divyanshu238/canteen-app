@@ -1,6 +1,8 @@
 /**
  * Canteen Backend - Production Ready
  * 
+ * FIREBASE PHONE OTP AUTHENTICATION
+ * 
  * CRITICAL: dotenv.config() MUST be called before any other imports
  * that access process.env variables.
  */
@@ -34,6 +36,7 @@ import { connectDB, disconnectDB } from './config/db.js';
 import { setupRoutes } from './routes/index.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import { seedDatabase } from './seed.js';
+import { initializeFirebase, isFirebaseReady } from './config/firebase.js';
 
 // Initialize Express app
 const app = express();
@@ -68,7 +71,8 @@ app.get('/api/health', (req, res) => {
         success: true,
         message: 'API is running',
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development'
+        environment: process.env.NODE_ENV || 'development',
+        firebase: isFirebaseReady() ? 'ready' : 'not initialized'
     });
 });
 
@@ -150,10 +154,10 @@ io.on('connection', (socket) => {
 });
 
 // =====================
-// DATABASE CONNECTION
+// INITIALIZATION
 // =====================
 
-const initDatabase = async () => {
+const initServices = async () => {
     // Connect to MongoDB using dedicated module
     await connectDB();
 
@@ -163,17 +167,22 @@ const initDatabase = async () => {
     }
 
     // =====================
-    // EMAIL SERVICE NOTE
+    // INITIALIZE FIREBASE (FAIL-FAST)
     // =====================
-    // Email service uses Resend HTTP API.
-    // We do NOT verify email on startup - errors fail individual requests, not boot.
-    // This prevents Render's reverse proxy from blocking startup due to connection tests.
-    if (config.resendApiKey) {
-        console.log('✅ Email service: Resend API configured');
-    } else if (!config.isProduction) {
-        console.warn('⚠️ Email service: NOT CONFIGURED (OTPs will be logged to console)');
+    // In production, server MUST NOT start if Firebase is not configured.
+    // Firebase handles all phone OTP verification.
+    const firebaseReady = initializeFirebase();
+
+    if (!firebaseReady && config.isProduction) {
+        console.error('❌ FATAL: Firebase initialization failed');
+        console.error('   Server cannot start without valid Firebase configuration');
+        process.exit(1);
+    }
+
+    if (firebaseReady) {
+        console.log('✅ Authentication: Firebase Phone OTP ready');
     } else {
-        console.error('❌ Email service: RESEND_API_KEY not set (emails will fail)');
+        console.warn('⚠️  Authentication: Firebase not configured (development mode)');
     }
 };
 
@@ -206,8 +215,8 @@ const startServer = async () => {
     isStarting = true;
 
     try {
-        // Initialize database connection first
-        await initDatabase();
+        // Initialize services (DB + Firebase)
+        await initServices();
 
         // Get port from config
         const port = config.port;
@@ -224,6 +233,7 @@ const startServer = async () => {
 ║  Environment: ${config.nodeEnv.padEnd(36)}║
 ║  Port:        ${String(actualPort).padEnd(36)}║
 ║  Frontend:    ${config.frontendUrl.padEnd(36)}║
+║  Auth:        ${'Firebase Phone OTP'.padEnd(36)}║
 ║  Razorpay:    ${(config.razorpayKeyId ? 'Configured ✓' : 'Not configured').padEnd(36)}║
 ╚═══════════════════════════════════════════════════╝
             `);

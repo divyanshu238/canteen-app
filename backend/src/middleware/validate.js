@@ -1,5 +1,7 @@
 /**
  * Request validation middleware using simple validation
+ * 
+ * FIREBASE PHONE OTP: No email/password validation needed for auth
  */
 
 import { AppError } from './error.js';
@@ -22,6 +24,13 @@ export const validate = (schema) => {
                     const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
                     if (!emailRegex.test(value)) {
                         errors.push(`${field} must be a valid email`);
+                    }
+                }
+
+                if (rules.type === 'phone') {
+                    // E.164 format validation
+                    if (!/^\+[1-9]\d{6,14}$/.test(value)) {
+                        errors.push(`${field} must be a valid phone number in E.164 format`);
                     }
                 }
 
@@ -69,15 +78,11 @@ export const validate = (schema) => {
 
 // Common validation schemas
 export const schemas = {
-    register: {
+    // Note: signup/login validation is handled by Firebase middleware
+    // These schemas are kept for backward compatibility with other routes
+    signup: {
         name: { required: true, type: 'string', minLength: 2, maxLength: 50 },
-        email: { required: true, type: 'email' },
-        password: { required: true, type: 'string', minLength: 6 },
         role: { type: 'string', enum: ['student', 'partner'] }
-    },
-    login: {
-        email: { required: true, type: 'email' },
-        password: { required: true, type: 'string' }
     },
     createMenuItem: {
         name: { required: true, type: 'string', minLength: 2, maxLength: 100 },

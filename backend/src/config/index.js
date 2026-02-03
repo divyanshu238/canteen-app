@@ -1,7 +1,7 @@
 /**
  * Production-ready configuration
  * 
- * EMAIL-ONLY OTP VERIFICATION SYSTEM
+ * FIREBASE PHONE OTP AUTHENTICATION SYSTEM
  * 
  * NOTE: dotenv.config() is called in index.js BEFORE this module is imported.
  * Do NOT call dotenv.config() here - environment variables are already loaded.
@@ -20,9 +20,10 @@ if (isProduction) {
         'RAZORPAY_KEY_SECRET',
         'RAZORPAY_WEBHOOK_SECRET',
         'FRONTEND_URL',
-        'REQUIRE_EMAIL_VERIFICATION',  // MANDATORY in production - EMAIL ONLY
-        'RESEND_API_KEY',                // Required for OTP delivery (HTTP API)
-        'EMAIL_FROM'                     // Verified sender email
+        // Firebase configuration (MANDATORY)
+        'FIREBASE_PROJECT_ID',
+        'FIREBASE_CLIENT_EMAIL',
+        'FIREBASE_PRIVATE_KEY'
     );
 }
 
@@ -35,38 +36,34 @@ if (missingVars.length > 0) {
 }
 
 // ============================================
-// SECURITY: Strict validation of EMAIL OTP config
+// VALIDATE FIREBASE PRIVATE KEY FORMAT
 // ============================================
-const emailOtpEnvValue = process.env.REQUIRE_EMAIL_VERIFICATION;
-if (isProduction && emailOtpEnvValue !== 'true' && emailOtpEnvValue !== 'false') {
-    console.error('❌ FATAL: REQUIRE_EMAIL_VERIFICATION must be exactly "true" or "false"');
-    console.error(`   Current value: "${emailOtpEnvValue}" (type: ${typeof emailOtpEnvValue})`);
-    process.exit(1);
-}
-
-// HARD FAIL: Reject any phone-based config in production
-if (isProduction && process.env.REQUIRE_PHONE_VERIFICATION) {
-    console.error('❌ FATAL: REQUIRE_PHONE_VERIFICATION is deprecated. Use REQUIRE_EMAIL_VERIFICATION instead.');
-    console.error('   Phone-based verification has been removed. Email is the ONLY verification method.');
-    process.exit(1);
-}
-
-// HARD FAIL: OTP delivery channel MUST be 'email' in production
-if (isProduction && process.env.OTP_DELIVERY_CHANNEL && process.env.OTP_DELIVERY_CHANNEL !== 'email') {
-    console.error('❌ FATAL: OTP_DELIVERY_CHANNEL must be "email" (or unset). SMS is not supported.');
-    console.error(`   Current value: "${process.env.OTP_DELIVERY_CHANNEL}"`);
-    process.exit(1);
-}
-
-// ============================================
-// VALIDATE RESEND API KEY
-// ============================================
-if (isProduction && process.env.RESEND_API_KEY) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey.startsWith('re_')) {
-        console.warn('⚠️ RESEND_API_KEY does not start with "re_" - verify it is correct');
+if (isProduction && process.env.FIREBASE_PRIVATE_KEY) {
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        console.error('❌ FATAL: FIREBASE_PRIVATE_KEY does not contain a valid PEM-formatted private key');
+        console.error('   Make sure to include the BEGIN/END markers and preserve newlines');
+        process.exit(1);
     }
 }
+
+// ============================================
+// REJECT DEPRECATED EMAIL/PHONE OTP CONFIG
+// ============================================
+const deprecatedVars = [
+    'REQUIRE_EMAIL_VERIFICATION',
+    'REQUIRE_PHONE_VERIFICATION',
+    'RESEND_API_KEY',
+    'EMAIL_USER',
+    'EMAIL_PASS',
+    'OTP_DELIVERY_CHANNEL'
+];
+
+deprecatedVars.forEach(varName => {
+    if (process.env[varName]) {
+        console.warn(`⚠️  DEPRECATED: ${varName} is no longer used. Firebase handles all OTP logic.`);
+    }
+});
 
 export const config = {
     // Environment
@@ -80,7 +77,7 @@ export const config = {
     // Database
     mongoUri: process.env.MONGO_URI || '',
 
-    // JWT
+    // JWT (for session tokens AFTER Firebase auth)
     jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production',
     jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'dev_refresh_secret_change_in_production',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
@@ -100,25 +97,12 @@ export const config = {
         ? process.env.CORS_ORIGINS.split(',')
         : ['http://localhost:5173', 'http://localhost:5174'],
 
-    // Email Configuration (for OTP delivery via Resend HTTP API)
-    // Sign up at https://resend.com for a free API key
-    // For testing, use: onboarding@resend.dev as EMAIL_FROM
-    resendApiKey: process.env.RESEND_API_KEY || '',
-    emailFrom: process.env.EMAIL_FROM || 'Canteen Connect <onboarding@resend.dev>',
-
-    // OTP Configuration - EMAIL ONLY
-    otpLength: parseInt(process.env.OTP_LENGTH) || 6,
-    otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES) || 5,
-    otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS) || 5,
-    otpResendCooldownSeconds: parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS) || 60,
-
-    // ============================================
-    // EMAIL VERIFICATION - SINGLE SOURCE OF TRUTH
-    // ============================================
-    // When true: ALL users MUST verify email via OTP before getting tokens
-    // When false: Email verification is NOT required (development mode)
-    // There is NO phone verification. NO SMS. NO fallbacks.
-    requireEmailVerification: process.env.REQUIRE_EMAIL_VERIFICATION === 'true',
+    // Firebase Configuration
+    firebase: {
+        projectId: process.env.FIREBASE_PROJECT_ID || '',
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+        privateKey: process.env.FIREBASE_PRIVATE_KEY || ''
+    }
 };
 
 // Log config (without secrets) in development
@@ -130,8 +114,7 @@ if (!isProduction) {
         mongoUri: config.mongoUri ? config.mongoUri.replace(/\/\/.*@/, '//***@') : '(not set)',
         jwtExpiresIn: config.jwtExpiresIn,
         razorpayConfigured: !!config.razorpayKeyId,
-        requireEmailVerification: config.requireEmailVerification,
-        emailConfigured: !!config.resendApiKey,
+        firebaseConfigured: !!(config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey),
     });
 }
 
