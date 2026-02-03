@@ -21,7 +21,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Shield, Loader } from 'lucide-react';
 import {
     initializeRecaptcha,
-    isRecaptchaInitialized,
     requestOTP,
     isFirebaseConfigured
 } from '../services/auth.service';
@@ -51,7 +50,6 @@ export const Login = () => {
     const initRecaptcha = useCallback(async () => {
         // Prevent multiple initialization attempts
         if (initAttempted.current) {
-            setRecaptchaReady(isRecaptchaInitialized());
             setIsInitializing(false);
             return;
         }
@@ -64,13 +62,7 @@ export const Login = () => {
             return;
         }
 
-        // Already initialized (from previous page visit)
-        if (isRecaptchaInitialized()) {
-            console.log('✅ reCAPTCHA already initialized from previous session');
-            setRecaptchaReady(true);
-            setIsInitializing(false);
-            return;
-        }
+
 
         console.log('🔄 Initializing reCAPTCHA...');
 

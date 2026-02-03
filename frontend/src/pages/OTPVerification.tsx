@@ -24,7 +24,6 @@ import { login } from '../store';
 import {
     verifyOTPAndAuthenticate,
     hasActiveOTPSession,
-    isRecaptchaInitialized,
     initializeRecaptcha,
     requestOTP,
     signOut
@@ -91,18 +90,12 @@ export const PhoneVerification = () => {
      */
     const ensureRecaptchaReady = useCallback(async () => {
         if (initAttempted.current) {
-            setRecaptchaReady(isRecaptchaInitialized());
             return;
         }
 
         initAttempted.current = true;
 
-        // Check if already initialized (from Login page)
-        if (isRecaptchaInitialized()) {
-            console.log('✅ reCAPTCHA already initialized');
-            setRecaptchaReady(true);
-            return;
-        }
+
 
         // Initialize for resend functionality
         console.log('🔄 Initializing reCAPTCHA for resend...');
@@ -255,14 +248,11 @@ export const PhoneVerification = () => {
         setError('');
 
         try {
-            // Check reCAPTCHA is ready
-            if (!isRecaptchaInitialized()) {
-                // Try to initialize
-                const success = await initializeRecaptcha('recaptcha-container-verify');
-                if (!success) {
-                    setError('Security check not ready. Please refresh the page.');
-                    return;
-                }
+            // Ensure reCAPTCHA is initialized
+            const success = await initializeRecaptcha('recaptcha-container');
+            if (!success) {
+                setError('Security check not ready. Please refresh the page.');
+                return;
             }
 
             // Extract phone number digits
