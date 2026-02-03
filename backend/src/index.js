@@ -1,281 +1,236 @@
 /**
- * Canteen Backend - Production Ready
+ * Canteen Backend - Render-Safe Production Server
  * 
- * RENDER COMPATIBILITY (CRITICAL):
- * 1. HTTP server MUST bind to 0.0.0.0 (not localhost)
- * 2. HTTP server MUST start BEFORE any async operations
- * 3. Health check MUST respond immediately (no dependencies)
- * 4. PORT must be process.env.PORT
+ * CRITICAL RENDER REQUIREMENTS:
+ * 1. httpServer.listen() MUST be called FIRST, before anything else
+ * 2. Socket.IO MUST be initialized AFTER listen() callback
+ * 3. Health routes MUST have ZERO dependencies
+ * 4. All async operations MUST happen AFTER server is live
+ * 5. Bind to 0.0.0.0 (not localhost)
  */
 
-// =====================
-// STEP 1: LOAD ENVIRONMENT VARIABLES (synchronous, no network)
-// =====================
+// ==============================================================
+// PHASE 1: SYNCHRONOUS SETUP ONLY (no imports with side effects)
+// ==============================================================
+
 import dotenv from 'dotenv';
 dotenv.config();
 
-// =====================
-// STEP 2: IMPORT ONLY SYNCHRONOUS MODULES FOR IMMEDIATE SERVER START
-// =====================
 import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
 
-// =====================
-// STEP 3: CREATE EXPRESS APP AND HTTP SERVER IMMEDIATELY
-// =====================
+// Create Express app and HTTP server - NOTHING ELSE YET
 const app = express();
 const httpServer = createServer(app);
 
-// Service state (will be updated after async init)
-let isServicesReady = false;
-let servicesError = null;
-let firebaseReady = false;
+// ==============================================================
+// PHASE 2: MINIMAL HEALTH CHECK (must respond before anything loads)
+// ==============================================================
 
-// =====================
-// STEP 4: CONFIGURE EXPRESS (synchronous only)
-// =====================
-app.set('trust proxy', 1);
-
-// Helmet - Security headers
-app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
-    crossOriginEmbedderPolicy: false
-}));
-
-// =====================
-// STEP 5: HEALTH CHECK - MUST BE FIRST ROUTE, NO DEPENDENCIES
-// =====================
+// These routes have ZERO dependencies - they work immediately
 app.get('/', (req, res) => {
     res.status(200).send('OK');
 });
 
 app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'ok',
-        timestamp: Date.now()
-    });
+    res.status(200).send('OK');
 });
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({
-        success: true,
-        message: 'API is running',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        servicesReady: isServicesReady,
-        firebase: firebaseReady ? 'ready' : 'pending'
+        status: 'ok',
+        timestamp: Date.now(),
+        uptime: process.uptime()
     });
 });
 
-// =====================
-// STEP 6: RATE LIMITING (skip health routes)
-// =====================
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
-    message: { success: false, error: 'Too many requests. Please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-    skip: (req) => req.path === '/' || req.path === '/health' || req.path === '/api/health'
-});
-app.use('/api/', limiter);
+// ==============================================================
+// PHASE 3: START HTTP SERVER IMMEDIATELY
+// This MUST happen before Socket.IO, MongoDB, Firebase, etc.
+// ==============================================================
 
-// CORS
-app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
-        ? (process.env.FRONTEND_URL || 'https://canteen-app-nine.vercel.app')
-        : true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// =====================
-// STEP 7: SOCKET.IO SETUP
-// =====================
-const io = new Server(httpServer, {
-    cors: {
-        origin: process.env.NODE_ENV === 'production'
-            ? (process.env.FRONTEND_URL || 'https://canteen-app-nine.vercel.app')
-            : '*',
-        methods: ['GET', 'POST'],
-        credentials: true
-    },
-    pingTimeout: 60000,
-    pingInterval: 25000
-});
-
-app.use((req, res, next) => {
-    req.io = io;
-    next();
-});
-
-io.on('connection', (socket) => {
-    console.log(`📱 Client connected: ${socket.id}`);
-    socket.on('join_canteen', (canteenId) => {
-        if (canteenId) socket.join(`canteen_${canteenId}`);
-    });
-    socket.on('join_order', (orderId) => {
-        if (orderId) socket.join(`order_${orderId}`);
-    });
-    socket.on('disconnect', () => {
-        console.log(`📴 Client disconnected: ${socket.id}`);
-    });
-});
-
-// =====================
-// STEP 8: SERVICE READINESS MIDDLEWARE
-// =====================
-app.use('/api/', (req, res, next) => {
-    if (req.path === '/health') return next();
-
-    if (servicesError) {
-        return res.status(503).json({
-            success: false,
-            error: 'Service temporarily unavailable'
-        });
-    }
-
-    if (!isServicesReady) {
-        return res.status(503).json({
-            success: false,
-            error: 'Service initializing, please wait'
-        });
-    }
-
-    next();
-});
-
-// =====================
-// STEP 9: START SERVER IMMEDIATELY - CRITICAL FOR RENDER
-// =====================
 const PORT = process.env.PORT || 5000;
-const HOST = '0.0.0.0'; // CRITICAL: Render requires binding to 0.0.0.0
 
-httpServer.listen(PORT, HOST, () => {
-    console.log(`✅ HTTP Server listening on ${HOST}:${PORT}`);
-    console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   Health check: http://${HOST}:${PORT}/api/health`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+    // This callback fires when server is ACTUALLY listening
+    console.log(`[RENDER] HTTP server listening on 0.0.0.0:${PORT}`);
 
-    // =====================
-    // STEP 10: INITIALIZE SERVICES AFTER SERVER IS LISTENING
-    // =====================
-    initializeServices();
+    // Now it's safe to initialize everything else
+    bootstrapApplication();
 });
 
 httpServer.on('error', (err) => {
-    console.error('❌ Server error:', err.message);
+    console.error('[FATAL] Server failed to start:', err.message);
     process.exit(1);
 });
 
-// =====================
-// ASYNC SERVICE INITIALIZATION (runs after server is listening)
-// =====================
-async function initializeServices() {
-    console.log('🔄 Initializing services...');
+// ==============================================================
+// PHASE 4: BOOTSTRAP (runs ONLY after server is listening)
+// ==============================================================
+
+async function bootstrapApplication() {
+    console.log('[BOOT] Starting application bootstrap...');
 
     try {
-        // Validate MONGO_URI
+        // --- Import modules dynamically (prevents blocking) ---
+        const helmet = (await import('helmet')).default;
+        const cors = (await import('cors')).default;
+        const rateLimit = (await import('express-rate-limit')).default;
+        const { Server: SocketIOServer } = await import('socket.io');
+
+        // --- Security middleware ---
+        app.use(helmet({
+            contentSecurityPolicy: false,
+            crossOriginEmbedderPolicy: false
+        }));
+
+        // --- Trust proxy (Render uses reverse proxy) ---
+        app.set('trust proxy', 1);
+
+        // --- Rate limiting (skip health routes) ---
+        const limiter = rateLimit({
+            windowMs: 15 * 60 * 1000,
+            max: 100,
+            skip: (req) => ['/', '/health', '/api/health'].includes(req.path)
+        });
+        app.use('/api/', limiter);
+
+        // --- CORS ---
+        const corsOrigin = process.env.FRONTEND_URL || 'https://canteen-app-nine.vercel.app';
+        app.use(cors({
+            origin: process.env.NODE_ENV === 'production' ? corsOrigin : true,
+            credentials: true,
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Authorization']
+        }));
+
+        // --- Body parsers ---
+        app.use(express.json({ limit: '10mb' }));
+        app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+        // --- Socket.IO (AFTER server is listening) ---
+        const io = new SocketIOServer(httpServer, {
+            cors: {
+                origin: process.env.NODE_ENV === 'production' ? corsOrigin : '*',
+                methods: ['GET', 'POST'],
+                credentials: true
+            },
+            pingTimeout: 60000,
+            pingInterval: 25000,
+            transports: ['websocket', 'polling'] // Explicit transports
+        });
+
+        // Attach io to app for route handlers
+        app.set('io', io);
+        app.use((req, res, next) => {
+            req.io = io;
+            next();
+        });
+
+        io.on('connection', (socket) => {
+            console.log(`[WS] Client connected: ${socket.id}`);
+            socket.on('join_canteen', (id) => id && socket.join(`canteen_${id}`));
+            socket.on('join_order', (id) => id && socket.join(`order_${id}`));
+            socket.on('disconnect', () => console.log(`[WS] Client disconnected: ${socket.id}`));
+        });
+
+        // Store io for shutdown
+        app.set('socketio', io);
+
+        console.log('[BOOT] Socket.IO initialized');
+
+        // --- MongoDB ---
         if (!process.env.MONGO_URI) {
-            throw new Error('MONGO_URI environment variable is not set');
+            throw new Error('MONGO_URI is required');
         }
 
-        // Dynamic imports to avoid blocking startup
-        const { connectDB, disconnectDB } = await import('./config/db.js');
-        const { setupRoutes } = await import('./routes/index.js');
-        const { notFound, errorHandler } = await import('./middleware/error.js');
-        const { initializeFirebase, isFirebaseReady } = await import('./config/firebase.js');
-        const config = (await import('./config/index.js')).default;
-
-        // Connect to MongoDB
+        const { connectDB } = await import('./config/db.js');
         await connectDB();
-        console.log('✅ MongoDB connected');
+        console.log('[BOOT] MongoDB connected');
 
-        // Seed in development
+        // --- Firebase ---
+        const { initializeFirebase } = await import('./config/firebase.js');
+        const firebaseOk = initializeFirebase();
+        if (!firebaseOk && process.env.NODE_ENV === 'production') {
+            throw new Error('Firebase initialization failed');
+        }
+        console.log(`[BOOT] Firebase: ${firebaseOk ? 'ready' : 'skipped'}`);
+
+        // --- Seed database (dev only) ---
         if (process.env.NODE_ENV !== 'production') {
             try {
                 const { seedDatabase } = await import('./seed.js');
                 await seedDatabase();
             } catch (e) {
-                console.warn('⚠️ Seed skipped:', e.message);
+                console.log('[BOOT] Seed skipped:', e.message);
             }
         }
 
-        // Initialize Firebase
-        firebaseReady = initializeFirebase();
-        if (!firebaseReady && process.env.NODE_ENV === 'production') {
-            throw new Error('Firebase initialization required in production');
-        }
-        console.log(`✅ Firebase: ${firebaseReady ? 'ready' : 'skipped (dev mode)'}`);
-
-        // Setup routes (after services are ready)
+        // --- API Routes ---
+        const { setupRoutes } = await import('./routes/index.js');
         setupRoutes(app);
+        console.log('[BOOT] API routes loaded');
 
-        // Error handlers (must be last)
+        // --- Error handlers (must be last) ---
+        const { notFound, errorHandler } = await import('./middleware/error.js');
         app.use(notFound);
         app.use(errorHandler);
 
-        // Mark as ready
-        isServicesReady = true;
+        // --- Mark server as fully operational ---
+        app.set('ready', true);
 
-        console.log(`
-╔════════════════════════════════════════════════════╗
-║           ✅ SERVER FULLY OPERATIONAL              ║
-╠════════════════════════════════════════════════════╣
-║  Port:        ${String(PORT).padEnd(37)}║
-║  Environment: ${(process.env.NODE_ENV || 'development').padEnd(37)}║
-║  Firebase:    ${(firebaseReady ? 'Ready ✓' : 'Disabled').padEnd(37)}║
-║  MongoDB:     ${'Connected ✓'.padEnd(37)}║
-╚════════════════════════════════════════════════════╝
-        `);
-
-        // Store disconnectDB for graceful shutdown
-        globalThis.__disconnectDB = disconnectDB;
+        console.log('=============================================');
+        console.log('  ✅ SERVER FULLY OPERATIONAL');
+        console.log(`  Port: ${PORT}`);
+        console.log(`  Env:  ${process.env.NODE_ENV || 'development'}`);
+        console.log('=============================================');
 
     } catch (error) {
-        console.error('❌ Service initialization failed:', error.message);
-        servicesError = error.message;
+        console.error('[FATAL] Bootstrap failed:', error.message);
+        console.error(error.stack);
 
         if (process.env.NODE_ENV === 'production') {
-            console.error('FATAL: Exiting...');
             process.exit(1);
         }
     }
 }
 
-// =====================
-// GRACEFUL SHUTDOWN
-// =====================
-async function gracefulShutdown(signal) {
-    console.log(`\n⏳ ${signal} received. Shutting down...`);
+// ==============================================================
+// PHASE 5: GRACEFUL SHUTDOWN
+// ==============================================================
 
-    httpServer.close(() => console.log('🔒 HTTP server closed'));
-    io.close(() => console.log('🔒 Socket.IO closed'));
+async function shutdown(signal) {
+    console.log(`[SHUTDOWN] ${signal} received`);
 
-    if (globalThis.__disconnectDB) {
-        await globalThis.__disconnectDB();
+    const io = app.get('socketio');
+    if (io) io.close();
+
+    httpServer.close(() => {
+        console.log('[SHUTDOWN] HTTP server closed');
+    });
+
+    // Close MongoDB if available
+    try {
+        const mongoose = await import('mongoose');
+        await mongoose.default.connection.close();
+        console.log('[SHUTDOWN] MongoDB closed');
+    } catch (e) {
+        // Ignore if mongoose not loaded
     }
 
-    console.log('👋 Goodbye!');
     process.exit(0);
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 process.on('uncaughtException', (err) => {
-    console.error('❌ Uncaught Exception:', err);
-    gracefulShutdown('UNCAUGHT_EXCEPTION');
-});
-process.on('unhandledRejection', (reason) => {
-    console.error('❌ Unhandled Rejection:', reason);
+    console.error('[UNCAUGHT]', err);
+    shutdown('UNCAUGHT_EXCEPTION');
 });
 
-export { app, io };
+process.on('unhandledRejection', (reason) => {
+    console.error('[UNHANDLED]', reason);
+});
+
+export { app, httpServer };
