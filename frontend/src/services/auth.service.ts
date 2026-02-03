@@ -1,9 +1,14 @@
 /**
  * Authentication Service - Firebase Phone OTP Integration
  * 
+ * CRITICAL ARCHITECTURE:
+ * - Uses global RecaptchaVerifier from firebase.ts (stored on window)
+ * - NEVER creates or clears reCAPTCHA - only accesses the global instance
+ * - confirmationResult stored on window for cross-page persistence
+ * 
  * FLOW:
  * 1. User enters phone number
- * 2. Firebase sends OTP (invisible reCAPTCHA)
+ * 2. Firebase sends OTP (using global invisible reCAPTCHA)
  * 3. User enters OTP
  * 4. Firebase verifies OTP
  * 5. Get Firebase ID token
@@ -13,20 +18,19 @@
  * SECURITY:
  * - Firebase tokens NOT stored in localStorage
  * - Only backend-issued JWTs are stored
- * - Automatic token refresh handling
  */
 
 import axios from 'axios';
 import config from '../config';
 import {
     setupRecaptcha,
-    sendOTP,
-    verifyOTP,
-    getIdToken,
+    sendOTP as firebaseSendOTP,
+    verifyOTP as firebaseVerifyOTP,
+    isFirebaseReady,
+    isRecaptchaReady,
+    hasActiveOTPSession as checkActiveSession,
     firebaseSignOut,
-    getFirebaseAuth,
-    type ConfirmationResult,
-    type RecaptchaVerifier
+    type ConfirmationResult
 } from '../firebase';
 
 // Types
@@ -56,87 +60,173 @@ export interface AuthError {
     code?: string;
 }
 
-// State management for OTP flow
-let confirmationResult: ConfirmationResult | null = null;
-let recaptchaVerifier: RecaptchaVerifier | null = null;
-
 /**
  * Initialize reCAPTCHA for phone authentication
- * Must be called before sending OTP
+ * This is a wrapper that delegates to the global singleton in firebase.ts
+ * 
+ * IMPORTANT: Can be called multiple times safely - only initializes once
+ * 
+ * @param containerId - DOM element ID for reCAPTCHA widget
+ * @returns Promise<boolean> - true if ready
  */
-export const initializeRecaptcha = (containerId: string): boolean => {
-    try {
-        // Clear existing verifier if any
-        if (recaptchaVerifier) {
-            try {
-                recaptchaVerifier.clear();
-            } catch {
-                // Ignore clear errors
-            }
-        }
+export const initializeRecaptcha = async (containerId: string): Promise<boolean> => {
+    // Already initialized
+    if (isRecaptchaReady()) {
+        console.log('✅ reCAPTCHA already ready');
+        return true;
+    }
 
-        recaptchaVerifier = setupRecaptcha(containerId);
-        return recaptchaVerifier !== null;
-    } catch (error) {
-        console.error('Failed to initialize reCAPTCHA:', error);
+    // Check if Firebase is ready
+    if (!isFirebaseReady()) {
+        console.error('❌ Firebase not configured');
         return false;
     }
+
+    // Initialize the global reCAPTCHA
+    return await setupRecaptcha(containerId);
+};
+
+/**
+ * Check if reCAPTCHA is ready for use
+ */
+export const isRecaptchaInitialized = (): boolean => {
+    return isRecaptchaReady();
+};
+
+/**
+ * Check if Firebase is properly configured
+ */
+export const isFirebaseConfigured = (): boolean => {
+    return isFirebaseReady();
 };
 
 /**
  * Send OTP to phone number
- * @param phoneNumber - Phone number with or without country code
- * @returns Success status
+ * 
+ * FLOW:
+ * 1. Validate phone number format
+ * 2. Use global reCAPTCHA verifier (NEVER create new one)
+ * 3. Call Firebase signInWithPhoneNumber
+ * 4. Store confirmationResult globally
+ * 
+ * @param phoneNumber - Phone number (with or without +91)
+ * @returns Success status with optional error message
  */
-export const requestOTP = async (phoneNumber: string): Promise<{ success: boolean; error?: string }> => {
+export const requestOTP = async (
+    phoneNumber: string
+): Promise<{ success: boolean; error?: string }> => {
     try {
-        if (!recaptchaVerifier) {
-            return { success: false, error: 'reCAPTCHA not initialized. Please refresh the page.' };
+        // Check reCAPTCHA is ready
+        if (!isRecaptchaReady()) {
+            console.error('❌ reCAPTCHA not initialized');
+            return {
+                success: false,
+                error: 'Security verification not ready. Please refresh the page.'
+            };
         }
 
-        // Format phone number (add +91 if no country code)
-        const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+91${phoneNumber.replace(/\D/g, '')}`;
+        // Format phone number (E.164)
+        // 1. Remove all non-digit characters
+        const cleaned = phoneNumber.replace(/\D/g, '');
 
-        // Validate phone number format
-        if (!/^\+\d{10,15}$/.test(formattedPhone)) {
-            return { success: false, error: 'Please enter a valid phone number' };
+        // 2. Handle country code
+        // If user typed 919876543210 (12 digits starting with 91), assume it's already got country code
+        // If user typed 9876543210 (10 digits), add 91
+        let formattedPhone = `+${cleaned}`;
+        if (cleaned.length === 10) {
+            formattedPhone = `+91${cleaned}`;
+        } else if (cleaned.length > 10 && !cleaned.startsWith('91')) {
+            // Heuristic: If >10 digits and doesn't start with 91, assume user might have typed 0 or other prefix? 
+            // Ideally we just trust the input if it looks like a full number, but for this app context (+91 specific), 
+            // let's ensure it starts with 91 if it's 12 digits.
+            // Actually, safest is: if < 10 digits, invalid. If 10, add +91. If > 10, assume it includes CC.
+            formattedPhone = `+${cleaned}`;
         }
 
-        confirmationResult = await sendOTP(formattedPhone, recaptchaVerifier);
-        return { success: true };
-    } catch (error: any) {
-        console.error('OTP send failed:', error);
+        // CORRECTION: The simple consistent logic for India context:
+        // Remove spaces/dashes. If it starts with +, keep it.
+        // If it starts with 0, remove 0.
+        // If length is 10, add +91.
 
-        // Handle specific Firebase errors
-        const errorCode = error.code || '';
-        let errorMessage = 'Failed to send OTP. Please try again.';
+        let digits = phoneNumber.replace(/[^0-9+]/g, ''); // Keep + and digits
+        if (digits.startsWith('0')) digits = digits.slice(1); // Remove leading 0
 
-        if (errorCode === 'auth/invalid-phone-number') {
-            errorMessage = 'Invalid phone number format. Please include country code.';
-        } else if (errorCode === 'auth/too-many-requests') {
-            errorMessage = 'Too many attempts. Please try again later.';
-        } else if (errorCode === 'auth/captcha-check-failed') {
-            errorMessage = 'Security verification failed. Please refresh and try again.';
-        } else if (errorCode === 'auth/quota-exceeded') {
-            errorMessage = 'SMS quota exceeded. Please try again later.';
-        }
-
-        // Reset reCAPTCHA on error
-        if (recaptchaVerifier) {
-            try {
-                recaptchaVerifier.clear();
-                recaptchaVerifier = null;
-            } catch {
-                // Ignore
+        if (!digits.startsWith('+')) {
+            if (digits.length === 10) {
+                digits = `+91${digits}`;
+            } else if (digits.startsWith('91') && digits.length === 12) {
+                digits = `+${digits}`;
+            } else {
+                digits = `+91${digits}`; // Fallback, let Firebase validate
             }
         }
 
+        const finalPhone = digits;
+
+        // Validate phone number format (E.164 simple check)
+        if (!/^\+\d{10,15}$/.test(finalPhone)) {
+            return {
+                success: false,
+                error: `Invalid phone number format: ${finalPhone}`
+            };
+        }
+
+        // Send OTP using global reCAPTCHA verifier
+        await firebaseSendOTP(finalPhone);
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('❌ OTP send failed:', error);
+
+        // Map Firebase error codes to user-friendly messages
+        const errorCode = error.code || 'unknown';
+        const rawMessage = error.message || 'Unknown error';
+        let errorMessage = `Failed to send OTP (${errorCode})`;
+
+        switch (errorCode) {
+            case 'auth/invalid-phone-number':
+                errorMessage = 'Invalid phone number format.';
+                break;
+            case 'auth/too-many-requests':
+                errorMessage = 'Too many attempts. Please wait a few minutes.';
+                break;
+            case 'auth/captcha-check-failed':
+                errorMessage = 'Security check failed. Please refresh the page.';
+                break;
+            case 'auth/quota-exceeded':
+                errorMessage = 'SMS quota exceeded. Please try again later.';
+                break;
+            case 'auth/network-request-failed':
+                errorMessage = 'Network error. Please check your connection.';
+                break;
+            case 'auth/internal-error':
+                errorMessage = 'Service temporarily unavailable. Please try again.';
+                break;
+            case 'auth/billing-not-enabled':
+                errorMessage = 'System configuration error (Billing).';
+                break;
+            default:
+                if (rawMessage.includes('reCAPTCHA')) {
+                    errorMessage = 'Security verification failed. Please refresh.';
+                } else {
+                    errorMessage = `Error: ${rawMessage} (${errorCode})`;
+                }
+        }
+
+        // DO NOT clear reCAPTCHA on error - let user retry
         return { success: false, error: errorMessage };
     }
 };
 
 /**
  * Verify OTP and authenticate with backend
+ * 
+ * FLOW:
+ * 1. Verify OTP with Firebase (uses global confirmationResult)
+ * 2. Get Firebase ID token
+ * 3. Send token to backend for signup/login
+ * 4. Return backend JWT for session management
+ * 
  * @param otp - 6-digit OTP code
  * @param action - 'signup' or 'login'
  * @param name - User name (required for signup)
@@ -147,30 +237,46 @@ export const verifyOTPAndAuthenticate = async (
     action: 'signup' | 'login',
     name?: string,
     role?: 'student' | 'partner'
-): Promise<{ success: boolean; data?: AuthResponse['data']; error?: string; code?: string }> => {
+): Promise<{
+    success: boolean;
+    data?: AuthResponse['data'];
+    error?: string;
+    code?: string
+}> => {
     try {
-        if (!confirmationResult) {
-            return { success: false, error: 'OTP session expired. Please request a new code.' };
+        // Validate OTP format
+        if (!/^\d{6}$/.test(otp)) {
+            return { success: false, error: 'Please enter a valid 6-digit code' };
+        }
+
+        // Check for active OTP session
+        if (!checkActiveSession()) {
+            return {
+                success: false,
+                error: 'OTP session expired. Please request a new code.'
+            };
         }
 
         // Verify OTP with Firebase
-        const user = await verifyOTP(confirmationResult, otp);
+        const firebaseUser = await firebaseVerifyOTP(otp);
 
         // Get Firebase ID token
-        const idToken = await user.getIdToken();
-
+        const idToken = await firebaseUser.getIdToken();
         if (!idToken) {
             return { success: false, error: 'Failed to get authentication token' };
         }
 
-        // Call backend API
+        // Prepare backend request
         const endpoint = action === 'signup' ? '/api/auth/signup' : '/api/auth/login';
         const backendUrl = config.apiUrl;
 
         const requestBody: { name?: string; role?: string } = {};
         if (action === 'signup') {
             if (!name || name.trim().length < 2) {
-                return { success: false, error: 'Name is required (minimum 2 characters)' };
+                return {
+                    success: false,
+                    error: 'Name is required (minimum 2 characters)'
+                };
             }
             requestBody.name = name.trim();
             if (role) {
@@ -178,6 +284,7 @@ export const verifyOTPAndAuthenticate = async (
             }
         }
 
+        // Call backend with Firebase ID token
         const response = await axios.post<AuthResponse>(
             `${backendUrl}${endpoint}`,
             requestBody,
@@ -189,27 +296,30 @@ export const verifyOTPAndAuthenticate = async (
             }
         );
 
-        // Clear confirmation result after successful auth
-        confirmationResult = null;
+        console.log('✅ Backend authentication successful');
 
         return {
             success: true,
             data: response.data.data
         };
     } catch (error: any) {
-        console.error('OTP verification failed:', error);
+        console.error('❌ Authentication failed:', error);
 
         // Handle Firebase errors
         if (error.code) {
             const errorCode = error.code;
             let errorMessage = 'Verification failed. Please try again.';
 
-            if (errorCode === 'auth/invalid-verification-code') {
-                errorMessage = 'Invalid OTP. Please check and try again.';
-            } else if (errorCode === 'auth/code-expired') {
-                errorMessage = 'OTP has expired. Please request a new code.';
-            } else if (errorCode === 'auth/session-expired') {
-                errorMessage = 'Session expired. Please request a new OTP.';
+            switch (errorCode) {
+                case 'auth/invalid-verification-code':
+                    errorMessage = 'Invalid OTP. Please check and try again.';
+                    break;
+                case 'auth/code-expired':
+                    errorMessage = 'OTP has expired. Please request a new code.';
+                    break;
+                case 'auth/session-expired':
+                    errorMessage = 'Session expired. Please request a new OTP.';
+                    break;
             }
 
             return { success: false, error: errorMessage };
@@ -219,55 +329,33 @@ export const verifyOTPAndAuthenticate = async (
         const errorResponse = error.response?.data as AuthError | undefined;
         return {
             success: false,
-            error: errorResponse?.error || 'Authentication failed',
+            error: errorResponse?.error || 'Authentication failed. Please try again.',
             code: errorResponse?.code
         };
     }
 };
 
 /**
- * Sign out from Firebase and clear state
- */
-export const signOut = async (): Promise<void> => {
-    confirmationResult = null;
-    if (recaptchaVerifier) {
-        try {
-            recaptchaVerifier.clear();
-        } catch {
-            // Ignore
-        }
-        recaptchaVerifier = null;
-    }
-    await firebaseSignOut();
-};
-
-/**
- * Check if Firebase is properly configured
- */
-export const isFirebaseConfigured = (): boolean => {
-    return getFirebaseAuth() !== null;
-};
-
-/**
- * Get current confirmation result (for state checks)
+ * Check if there's an active OTP session
  */
 export const hasActiveOTPSession = (): boolean => {
-    return confirmationResult !== null;
+    return checkActiveSession();
 };
 
 /**
- * Clear OTP session without signing out
+ * Sign out and clear session
+ * NOTE: Does NOT clear reCAPTCHA - it persists for next login
  */
-export const clearOTPSession = (): void => {
-    confirmationResult = null;
+export const signOut = async (): Promise<void> => {
+    await firebaseSignOut();
 };
 
 export default {
     initializeRecaptcha,
+    isRecaptchaInitialized,
+    isFirebaseConfigured,
     requestOTP,
     verifyOTPAndAuthenticate,
-    signOut,
-    isFirebaseConfigured,
     hasActiveOTPSession,
-    clearOTPSession
+    signOut
 };
