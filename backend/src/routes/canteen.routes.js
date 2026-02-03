@@ -5,6 +5,22 @@ import { optionalAuth } from '../middleware/auth.js';
 const router = Router();
 
 /**
+ * @route   GET /api/canteens/categories/all
+ * @desc    Get all available categories with item counts
+ * @access  Public
+ * NOTE: This route MUST be before /:id to avoid matching 'categories' as an ID
+ */
+router.get('/categories/all', canteenController.getAllCategories);
+
+/**
+ * @route   GET /api/canteens/by-category/:category
+ * @desc    Get canteens filtered by category with only matching items
+ * @access  Public
+ * NOTE: This route MUST be before /:id to avoid matching 'by-category' as an ID
+ */
+router.get('/by-category/:category', canteenController.getCanteensByCategory);
+
+/**
  * @route   GET /api/canteens
  * @desc    Get all open canteens
  * @access  Public

@@ -78,6 +78,7 @@ export const Home = () => {
                     {categories.map(cat => (
                         <div
                             key={cat.name}
+                            onClick={() => navigate(`/category/${cat.name.toLowerCase()}`)}
                             className="flex-shrink-0 cursor-pointer group"
                         >
                             <div className={`w-32 h-32 rounded-2xl bg-gradient-to-br ${cat.color} flex items-center justify-center shadow-md hover:shadow-xl transform hover:scale-105 transition-all duration-200 mb-3`}>
