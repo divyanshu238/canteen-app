@@ -140,6 +140,19 @@ export const canteenAPI = {
 
     getMenu: (id: string) =>
         api.get(`/canteens/${id}/menu`),
+
+    /**
+     * Get canteens filtered by category with ONLY items in that category
+     * This is the key API for category filtering
+     */
+    getByCategory: (category: string) =>
+        api.get(`/canteens/by-category/${encodeURIComponent(category)}`),
+
+    /**
+     * Get all available categories from the database
+     */
+    getAllCategories: () =>
+        api.get('/canteens/categories/all'),
 };
 
 // Order API
