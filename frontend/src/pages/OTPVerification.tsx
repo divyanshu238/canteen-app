@@ -1,10 +1,15 @@
 /**
  * Phone OTP Verification Page - Firebase Phone Authentication
  * 
+ * CRITICAL reCAPTCHA LIFECYCLE:
+ * - Uses the SAME global reCAPTCHA from Login page
+ * - For resend: reuses existing verifier, NEVER creates new one
+ * - confirmationResult stored on window for cross-page access
+ * 
  * FLOW:
  * 1. User arrives from Login page with OTP already sent
  * 2. User enters 6-digit OTP
- * 3. Firebase verifies OTP
+ * 3. Firebase verifies OTP (uses window.confirmationResult)
  * 4. On success, get Firebase ID token
  * 5. Send token to backend for signup/login
  * 6. Backend issues JWT and logs user in
@@ -12,12 +17,19 @@
  * NO email verification. Phone is the ONLY authentication method.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { login } from '../store';
-import { verifyOTPAndAuthenticate, hasActiveOTPSession, initializeRecaptcha, requestOTP, signOut } from '../services/auth.service';
-import { Phone, ArrowLeft, RefreshCw, Shield, CheckCircle, AlertCircle } from 'lucide-react';
+import {
+    verifyOTPAndAuthenticate,
+    hasActiveOTPSession,
+    isRecaptchaInitialized,
+    initializeRecaptcha,
+    requestOTP,
+    signOut
+} from '../services/auth.service';
+import { Phone, ArrowLeft, RefreshCw, Shield, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 
 interface PendingPhoneVerification {
     phoneNumber: string;
@@ -32,7 +44,7 @@ export const PhoneVerification = () => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Get pending verification data
+    // State
     const [pendingData, setPendingData] = useState<PendingPhoneVerification | null>(null);
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [isLoading, setIsLoading] = useState(false);
@@ -40,17 +52,21 @@ export const PhoneVerification = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [countdown, setCountdown] = useState(60);
+    const [recaptchaReady, setRecaptchaReady] = useState(false);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+    const initAttempted = useRef(false);
 
-    // Load pending verification data
+    /**
+     * Load pending verification data from navigation state or sessionStorage
+     */
     useEffect(() => {
         const stateData = location.state as PendingPhoneVerification | undefined;
         const storedData = sessionStorage.getItem('pendingPhoneVerification');
 
         if (stateData?.phoneNumber) {
             setPendingData(stateData);
+            // Sync to sessionStorage
             sessionStorage.setItem('pendingPhoneVerification', JSON.stringify(stateData));
         } else if (storedData) {
             try {
@@ -58,23 +74,52 @@ export const PhoneVerification = () => {
                 if (parsed.phoneNumber) {
                     setPendingData(parsed);
                 } else {
-                    navigate('/login');
+                    navigate('/login', { replace: true });
                 }
             } catch {
-                navigate('/login');
+                navigate('/login', { replace: true });
             }
         } else {
-            navigate('/login');
-        }
-
-        // Check if we have an active OTP session
-        if (!hasActiveOTPSession()) {
-            // No active session, user may have refreshed
-            // They can still resend OTP
+            // No verification data - redirect to login
+            navigate('/login', { replace: true });
         }
     }, [location.state, navigate]);
 
-    // Countdown timer
+    /**
+     * Initialize reCAPTCHA - needed for resend functionality
+     * Uses the same global verifier if already initialized
+     */
+    const ensureRecaptchaReady = useCallback(async () => {
+        if (initAttempted.current) {
+            setRecaptchaReady(isRecaptchaInitialized());
+            return;
+        }
+
+        initAttempted.current = true;
+
+        // Check if already initialized (from Login page)
+        if (isRecaptchaInitialized()) {
+            console.log('✅ reCAPTCHA already initialized');
+            setRecaptchaReady(true);
+            return;
+        }
+
+        // Initialize for resend functionality
+        console.log('🔄 Initializing reCAPTCHA for resend...');
+        const success = await initializeRecaptcha('recaptcha-container');
+        setRecaptchaReady(success);
+    }, []);
+
+    /**
+     * Effect: Initialize reCAPTCHA on mount (for resend)
+     */
+    useEffect(() => {
+        ensureRecaptchaReady();
+    }, [ensureRecaptchaReady]);
+
+    /**
+     * Countdown timer for resend
+     */
     useEffect(() => {
         if (countdown > 0) {
             const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
@@ -82,6 +127,9 @@ export const PhoneVerification = () => {
         }
     }, [countdown]);
 
+    /**
+     * Handle OTP input change
+     */
     const handleOtpChange = (index: number, value: string) => {
         // Only allow digits
         if (value && !/^\d$/.test(value)) return;
@@ -102,12 +150,18 @@ export const PhoneVerification = () => {
         }
     };
 
+    /**
+     * Handle backspace navigation
+     */
     const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
         if (e.key === 'Backspace' && !otp[index] && index > 0) {
             inputRefs.current[index - 1]?.focus();
         }
     };
 
+    /**
+     * Handle paste of full OTP
+     */
     const handlePaste = (e: React.ClipboardEvent) => {
         e.preventDefault();
         const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
@@ -119,6 +173,9 @@ export const PhoneVerification = () => {
         }
     };
 
+    /**
+     * Verify OTP and authenticate with backend
+     */
     const handleVerify = async (otpValue?: string) => {
         const otpCode = otpValue || otp.join('');
         if (otpCode.length !== 6 || !pendingData) return;
@@ -127,7 +184,7 @@ export const PhoneVerification = () => {
         setError('');
 
         try {
-            // Convert 'register' to 'signup' for the backend API
+            // Convert 'register' to 'signup' for backend API
             const authAction = pendingData.action === 'register' ? 'signup' : 'login';
 
             const result = await verifyOTPAndAuthenticate(
@@ -178,6 +235,7 @@ export const PhoneVerification = () => {
                 }
             }, 500);
         } catch (err: any) {
+            console.error('Verification error:', err);
             setError(err.message || 'Verification failed. Please try again.');
             setOtp(['', '', '', '', '', '']);
             inputRefs.current[0]?.focus();
@@ -186,6 +244,10 @@ export const PhoneVerification = () => {
         }
     };
 
+    /**
+     * Resend OTP
+     * Uses the SAME global reCAPTCHA verifier
+     */
     const handleResendOTP = async () => {
         if (!pendingData || isResending || countdown > 0) return;
 
@@ -193,13 +255,17 @@ export const PhoneVerification = () => {
         setError('');
 
         try {
-            // Initialize reCAPTCHA if needed
-            initializeRecaptcha('recaptcha-container-verify');
+            // Check reCAPTCHA is ready
+            if (!isRecaptchaInitialized()) {
+                // Try to initialize
+                const success = await initializeRecaptcha('recaptcha-container-verify');
+                if (!success) {
+                    setError('Security check not ready. Please refresh the page.');
+                    return;
+                }
+            }
 
-            // Wait a bit for reCAPTCHA to be ready
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Extract phone number without country code
+            // Extract phone number digits
             const phoneDigits = pendingData.phoneNumber.replace(/\D/g, '').slice(-10);
 
             const result = await requestOTP(phoneDigits);
@@ -217,18 +283,23 @@ export const PhoneVerification = () => {
             // Clear success after 3 seconds
             setTimeout(() => setSuccess(''), 3000);
         } catch (err: any) {
+            console.error('Resend error:', err);
             setError(err.message || 'Failed to resend OTP');
         } finally {
             setIsResending(false);
         }
     };
 
+    /**
+     * Go back to login
+     */
     const handleGoBack = async () => {
         sessionStorage.removeItem('pendingPhoneVerification');
         await signOut();
         navigate('/login', { replace: true });
     };
 
+    // Loading state while checking verification data
     if (!pendingData) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -318,6 +389,14 @@ export const PhoneVerification = () => {
                             </div>
                         )}
 
+                        {/* No Active Session Warning */}
+                        {!hasActiveOTPSession() && !success && (
+                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-700 text-sm flex items-center gap-2">
+                                <AlertCircle size={18} />
+                                <div>OTP session expired. Please click "Resend Code" below.</div>
+                            </div>
+                        )}
+
                         {/* OTP Input */}
                         <div className="mb-8">
                             <label className="block text-sm font-bold text-gray-700 mb-4 text-center">
@@ -376,7 +455,7 @@ export const PhoneVerification = () => {
                                     className="text-orange-600 font-bold hover:text-orange-700 flex items-center gap-2 mx-auto disabled:opacity-50"
                                 >
                                     {isResending ? (
-                                        <div className="w-4 h-4 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
+                                        <Loader size={18} className="animate-spin" />
                                     ) : (
                                         <RefreshCw size={18} />
                                     )}
@@ -400,8 +479,8 @@ export const PhoneVerification = () => {
                             </div>
                         )}
 
-                        {/* Invisible reCAPTCHA container for resend */}
-                        <div id="recaptcha-container-verify" ref={recaptchaContainerRef}></div>
+                        {/* reCAPTCHA container for resend */}
+                        <div id="recaptcha-container"></div>
                     </div>
                 </div>
             </div>
@@ -409,6 +488,6 @@ export const PhoneVerification = () => {
     );
 };
 
-// Export both names for compatibility
+// Export for compatibility
 export const EmailVerification = PhoneVerification;
 export const OTPVerification = PhoneVerification;

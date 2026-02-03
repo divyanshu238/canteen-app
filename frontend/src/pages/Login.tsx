@@ -1,19 +1,30 @@
 /**
  * Login/Signup Page - Firebase Phone OTP Authentication
  * 
+ * CRITICAL reCAPTCHA LIFECYCLE:
+ * - reCAPTCHA is initialized ONCE on component mount
+ * - NEVER re-initialized on mode change or errors
+ * - Uses global singleton from firebase.ts
+ * - Container must exist in DOM before initialization
+ * 
  * FLOW:
- * 1. User selects Login or Register
- * 2. User enters phone number (and name for registration)
- * 3. Firebase sends OTP via invisible reCAPTCHA
- * 4. Redirect to OTP verification page
+ * 1. Component mounts → initialize reCAPTCHA once
+ * 2. User enters phone (and name for register)
+ * 3. Submit → Firebase sends OTP using pre-initialized reCAPTCHA
+ * 4. Navigate to OTP verification page
  * 
  * NO email/password logic. Phone number is the ONLY identifier.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Shield } from 'lucide-react';
-import { initializeRecaptcha, requestOTP, isFirebaseConfigured } from '../services/auth.service';
+import { Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Shield, Loader } from 'lucide-react';
+import {
+    initializeRecaptcha,
+    isRecaptchaInitialized,
+    requestOTP,
+    isFirebaseConfigured
+} from '../services/auth.service';
 
 type AuthMode = 'login' | 'register';
 type Role = 'student' | 'partner';
@@ -26,46 +37,69 @@ export const Login = () => {
     const [name, setName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isInitializing, setIsInitializing] = useState(true);
     const [error, setError] = useState('');
     const [recaptchaReady, setRecaptchaReady] = useState(false);
 
     const navigate = useNavigate();
-    const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+    const initAttempted = useRef(false);
 
-    // Initialize reCAPTCHA on mount
-    useEffect(() => {
-        if (!isFirebaseConfigured()) {
-            setError('Firebase is not configured. Please contact support.');
+    /**
+     * Initialize reCAPTCHA - ONCE ONLY
+     * Uses useCallback to ensure stable reference
+     */
+    const initRecaptcha = useCallback(async () => {
+        // Prevent multiple initialization attempts
+        if (initAttempted.current) {
+            setRecaptchaReady(isRecaptchaInitialized());
+            setIsInitializing(false);
             return;
         }
 
-        // Small delay to ensure DOM is ready
-        const timer = setTimeout(() => {
-            const initialized = initializeRecaptcha('recaptcha-container');
-            setRecaptchaReady(initialized);
-            if (!initialized) {
-                setError('Failed to initialize security check. Please refresh the page.');
-            }
-        }, 500);
+        initAttempted.current = true;
 
-        return () => clearTimeout(timer);
+        if (!isFirebaseConfigured()) {
+            setError('Firebase is not configured. Please contact support.');
+            setIsInitializing(false);
+            return;
+        }
+
+        // Already initialized (from previous page visit)
+        if (isRecaptchaInitialized()) {
+            console.log('✅ reCAPTCHA already initialized from previous session');
+            setRecaptchaReady(true);
+            setIsInitializing(false);
+            return;
+        }
+
+        console.log('🔄 Initializing reCAPTCHA...');
+
+        // Initialize with the container ID
+        const success = await initializeRecaptcha('recaptcha-container');
+
+        if (success) {
+            console.log('✅ reCAPTCHA ready');
+            setRecaptchaReady(true);
+        } else {
+            console.error('❌ reCAPTCHA initialization failed');
+            setError('Failed to initialize security check. Please refresh the page.');
+        }
+
+        setIsInitializing(false);
     }, []);
 
-    // Re-initialize reCAPTCHA when mode changes
+    /**
+     * Effect: Initialize reCAPTCHA on mount
+     * - Waits for DOM to be ready
+     * - Only runs once per session
+     */
     useEffect(() => {
-        if (isFirebaseConfigured() && recaptchaContainerRef.current) {
-            const timer = setTimeout(() => {
-                const initialized = initializeRecaptcha('recaptcha-container');
-                setRecaptchaReady(initialized);
-            }, 300);
-            return () => clearTimeout(timer);
-        }
-    }, [mode]);
+        initRecaptcha();
+    }, [initRecaptcha]);
 
     const formatPhoneNumber = (value: string): string => {
         // Remove non-digits
         const digits = value.replace(/\D/g, '');
-
         // Limit to 10 digits for Indian numbers
         return digits.slice(0, 10);
     };
@@ -106,15 +140,16 @@ export const Login = () => {
         setIsLoading(true);
 
         try {
-            // Request OTP
+            // Request OTP using global reCAPTCHA
             const result = await requestOTP(phoneNumber);
 
             if (!result.success) {
                 setError(result.error || 'Failed to send OTP');
+                setIsLoading(false);
                 return;
             }
 
-            // Store verification context
+            // Store verification context for OTP page
             const verificationData = {
                 phoneNumber: `+91${phoneNumber}`,
                 phoneNumberMasked: `+91 ******${phoneNumber.slice(-4)}`,
@@ -128,10 +163,17 @@ export const Login = () => {
             // Navigate to OTP verification page
             navigate('/verify-phone', { state: verificationData });
         } catch (err: any) {
+            console.error('Submit error:', err);
             setError(err.message || 'Failed to send OTP. Please try again.');
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleModeToggle = () => {
+        setMode(mode === 'login' ? 'register' : 'login');
+        setError('');
+        // DO NOT re-initialize reCAPTCHA when mode changes
     };
 
     return (
@@ -205,6 +247,14 @@ export const Login = () => {
                             <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-700 text-sm flex items-center gap-2">
                                 <AlertCircle size={18} />
                                 <span>Firebase configuration missing. Authentication disabled.</span>
+                            </div>
+                        )}
+
+                        {/* Initializing State */}
+                        {isInitializing && (
+                            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 text-sm flex items-center gap-2">
+                                <Loader size={18} className="animate-spin" />
+                                <span>Initializing secure authentication...</span>
                             </div>
                         )}
 
@@ -301,7 +351,7 @@ export const Login = () => {
                             {/* Submit Button */}
                             <button
                                 type="submit"
-                                disabled={isLoading || !recaptchaReady || !isFirebaseConfigured()}
+                                disabled={isLoading || isInitializing || !recaptchaReady || !isFirebaseConfigured()}
                                 className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {isLoading ? (
@@ -321,10 +371,7 @@ export const Login = () => {
                                 {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setMode(mode === 'login' ? 'register' : 'login');
-                                        setError('');
-                                    }}
+                                    onClick={handleModeToggle}
                                     className="text-orange-600 font-bold hover:text-orange-700"
                                 >
                                     {mode === 'login' ? 'Sign Up' : 'Sign In'}
@@ -339,8 +386,8 @@ export const Login = () => {
                             </p>
                         </div>
 
-                        {/* Invisible reCAPTCHA container */}
-                        <div id="recaptcha-container" ref={recaptchaContainerRef}></div>
+                        {/* reCAPTCHA container - MUST exist in DOM for initialization */}
+                        <div id="recaptcha-container"></div>
                     </div>
                 </div>
             </div>
