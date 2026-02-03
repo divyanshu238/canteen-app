@@ -1,41 +1,61 @@
+/**
+ * Authentication Routes - FIREBASE PHONE OTP ONLY
+ * 
+ * All phone OTP verification is handled by Firebase.
+ * Backend only verifies Firebase ID tokens.
+ */
+
 import { Router } from 'express';
 import authController from '../controllers/auth.controller.js';
 import { authenticate, optionalAuth } from '../middleware/auth.js';
-import { validate, schemas } from '../middleware/validate.js';
+import { verifyFirebaseToken, requirePhoneNumber } from '../middleware/firebaseAuth.middleware.js';
 
 const router = Router();
 
 /**
- * @route   POST /api/auth/register
- * @desc    Register new user
- * @access  Public
+ * @route   POST /api/auth/signup
+ * @desc    Register new user with Firebase Phone OTP
+ * @access  Public (requires Firebase ID token)
+ * @header  Authorization: Bearer <firebase_id_token>
+ * @body    { name: string, role?: 'student' | 'partner' }
  */
-router.post('/register', validate(schemas.register), authController.register);
+router.post('/signup',
+    verifyFirebaseToken,
+    requirePhoneNumber,
+    authController.signup
+);
 
 /**
  * @route   POST /api/auth/login
- * @desc    Login user
- * @access  Public
+ * @desc    Login user with Firebase Phone OTP
+ * @access  Public (requires Firebase ID token)
+ * @header  Authorization: Bearer <firebase_id_token>
  */
-router.post('/login', validate(schemas.login), authController.login);
+router.post('/login',
+    verifyFirebaseToken,
+    requirePhoneNumber,
+    authController.login
+);
 
 /**
  * @route   POST /api/auth/refresh
  * @desc    Refresh access token
  * @access  Public
+ * @body    { refreshToken: string }
  */
 router.post('/refresh', authController.refreshToken);
 
 /**
  * @route   POST /api/auth/logout
  * @desc    Logout user
- * @access  Private
+ * @access  Private (optional)
+ * @body    { refreshToken?: string, logoutAll?: boolean }
  */
 router.post('/logout', optionalAuth, authController.logout);
 
 /**
  * @route   GET /api/auth/me
- * @desc    Get current user
+ * @desc    Get current user profile
  * @access  Private
  */
 router.get('/me', authenticate, authController.getMe);
@@ -44,14 +64,8 @@ router.get('/me', authenticate, authController.getMe);
  * @route   PUT /api/auth/profile
  * @desc    Update user profile
  * @access  Private
+ * @body    { name?: string }
  */
 router.put('/profile', authenticate, authController.updateProfile);
-
-/**
- * @route   PUT /api/auth/password
- * @desc    Change password
- * @access  Private
- */
-router.put('/password', authenticate, authController.changePassword);
 
 export default router;
