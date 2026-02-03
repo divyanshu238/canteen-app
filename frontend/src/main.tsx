@@ -41,6 +41,8 @@ if (!rootElement) throw new Error('Failed to find the root element');
 
 ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
+        {/* Global reCAPTCHA container - SINGLETON LIFECYCLE */}
+        <div id="recaptcha-container"></div>
         <Provider store={store}>
             <SocketProvider>
                 <BrowserRouter>

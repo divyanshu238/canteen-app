@@ -51,10 +51,8 @@ export const PhoneVerification = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [countdown, setCountdown] = useState(60);
-    const [recaptchaReady, setRecaptchaReady] = useState(false);
 
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-    const initAttempted = useRef(false);
 
     /**
      * Load pending verification data from navigation state or sessionStorage
@@ -84,31 +82,7 @@ export const PhoneVerification = () => {
         }
     }, [location.state, navigate]);
 
-    /**
-     * Initialize reCAPTCHA - needed for resend functionality
-     * Uses the same global verifier if already initialized
-     */
-    const ensureRecaptchaReady = useCallback(async () => {
-        if (initAttempted.current) {
-            return;
-        }
 
-        initAttempted.current = true;
-
-
-
-        // Initialize for resend functionality
-        console.log('🔄 Initializing reCAPTCHA for resend...');
-        const success = await initializeRecaptcha('recaptcha-container');
-        setRecaptchaReady(success);
-    }, []);
-
-    /**
-     * Effect: Initialize reCAPTCHA on mount (for resend)
-     */
-    useEffect(() => {
-        ensureRecaptchaReady();
-    }, [ensureRecaptchaReady]);
 
     /**
      * Countdown timer for resend
@@ -469,8 +443,7 @@ export const PhoneVerification = () => {
                             </div>
                         )}
 
-                        {/* reCAPTCHA container for resend */}
-                        <div id="recaptcha-container"></div>
+
                     </div>
                 </div>
             </div>

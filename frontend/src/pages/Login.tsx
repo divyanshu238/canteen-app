@@ -36,58 +36,10 @@ export const Login = () => {
     const [name, setName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [isInitializing, setIsInitializing] = useState(true);
     const [error, setError] = useState('');
-    const [recaptchaReady, setRecaptchaReady] = useState(false);
-
     const navigate = useNavigate();
-    const initAttempted = useRef(false);
-
-    /**
-     * Initialize reCAPTCHA - ONCE ONLY
-     * Uses useCallback to ensure stable reference
-     */
-    const initRecaptcha = useCallback(async () => {
-        // Prevent multiple initialization attempts
-        if (initAttempted.current) {
-            setIsInitializing(false);
-            return;
-        }
-
-        initAttempted.current = true;
-
-        if (!isFirebaseConfigured()) {
-            setError('Firebase is not configured. Please contact support.');
-            setIsInitializing(false);
-            return;
-        }
 
 
-
-        console.log('🔄 Initializing reCAPTCHA...');
-
-        // Initialize with the container ID
-        const success = await initializeRecaptcha('recaptcha-container');
-
-        if (success) {
-            console.log('✅ reCAPTCHA ready');
-            setRecaptchaReady(true);
-        } else {
-            console.error('❌ reCAPTCHA initialization failed');
-            setError('Failed to initialize security check. Please refresh the page.');
-        }
-
-        setIsInitializing(false);
-    }, []);
-
-    /**
-     * Effect: Initialize reCAPTCHA on mount
-     * - Waits for DOM to be ready
-     * - Only runs once per session
-     */
-    useEffect(() => {
-        initRecaptcha();
-    }, [initRecaptcha]);
 
     const formatPhoneNumber = (value: string): string => {
         // Remove non-digits
@@ -113,10 +65,7 @@ export const Login = () => {
             return false;
         }
 
-        if (!recaptchaReady) {
-            setError('Security check not ready. Please wait or refresh the page.');
-            return false;
-        }
+
 
         return true;
     };
@@ -132,6 +81,14 @@ export const Login = () => {
         setIsLoading(true);
 
         try {
+            // Lazy initialize reCAPTCHA
+            const isRecaptchaReady = await initializeRecaptcha('recaptcha-container');
+            if (!isRecaptchaReady) {
+                setError('Security verification failed. Please refresh.');
+                setIsLoading(false);
+                return;
+            }
+
             // Request OTP using global reCAPTCHA
             const result = await requestOTP(phoneNumber);
 
@@ -242,13 +199,7 @@ export const Login = () => {
                             </div>
                         )}
 
-                        {/* Initializing State */}
-                        {isInitializing && (
-                            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-700 text-sm flex items-center gap-2">
-                                <Loader size={18} className="animate-spin" />
-                                <span>Initializing secure authentication...</span>
-                            </div>
-                        )}
+
 
                         {/* Error Message */}
                         {error && (
@@ -343,7 +294,7 @@ export const Login = () => {
                             {/* Submit Button */}
                             <button
                                 type="submit"
-                                disabled={isLoading || isInitializing || !recaptchaReady || !isFirebaseConfigured()}
+                                disabled={isLoading || !isFirebaseConfigured()}
                                 className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {isLoading ? (
@@ -378,8 +329,7 @@ export const Login = () => {
                             </p>
                         </div>
 
-                        {/* reCAPTCHA container - MUST exist in DOM for initialization */}
-                        <div id="recaptcha-container"></div>
+
                     </div>
                 </div>
             </div>
