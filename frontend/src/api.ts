@@ -155,6 +155,23 @@ export const canteenAPI = {
         api.get('/canteens/categories/all'),
 };
 
+// Search API
+export const searchAPI = {
+    /**
+     * Search for canteens and dishes
+     * @param query - Search query string (min 2 chars)
+     */
+    search: (query: string) =>
+        api.get('/search', { params: { q: query } }),
+
+    /**
+     * Get search suggestions for autocomplete
+     * @param query - Partial search query
+     */
+    suggestions: (query: string) =>
+        api.get('/search/suggestions', { params: { q: query } }),
+};
+
 // Order API
 export const orderAPI = {
     create: (data: { canteenId: string; items: Array<{ itemId: string; qty: number }>; specialInstructions?: string }) =>

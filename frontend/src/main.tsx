@@ -8,6 +8,7 @@ import { SocketProvider } from './socket';
 import { Home } from './pages/Home';
 import { CanteenMenu } from './pages/CanteenMenu';
 import { CategoryPage } from './pages/CategoryPage';
+import { SearchResultsPage } from './pages/SearchResultsPage';
 import { Cart } from './pages/Cart';
 import { OrderTracking } from './pages/OrderTracking';
 import { Login } from './pages/Login';
@@ -48,6 +49,7 @@ ReactDOM.createRoot(rootElement).render(
                         <Route path="/" element={<Home />} />
                         <Route path="/canteen/:id" element={<CanteenMenu />} />
                         <Route path="/category/:category" element={<CategoryPage />} />
+                        <Route path="/search" element={<SearchResultsPage />} />
                         <Route path="/cart" element={<Cart />} />
                         <Route path="/login" element={<Login />} />
                         <Route path="/verify-email" element={<EmailVerification />} />

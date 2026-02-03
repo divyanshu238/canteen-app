@@ -4,6 +4,7 @@ import orderRoutes from './order.routes.js';
 import partnerRoutes from './partner.routes.js';
 import adminRoutes from './admin.routes.js';
 import otpRoutes from './otp.routes.js';
+import searchRoutes from './search.routes.js';
 
 export const setupRoutes = (app) => {
     app.use('/api/auth', authRoutes);
@@ -12,6 +13,7 @@ export const setupRoutes = (app) => {
     app.use('/api/partner', partnerRoutes);
     app.use('/api/admin', adminRoutes);
     app.use('/api/otp', otpRoutes);
+    app.use('/api/search', searchRoutes);
 
     // Note: /api/health is defined in index.js BEFORE rate limiting middleware
     // to ensure it always responds with 200 for Render health checks
@@ -24,5 +26,6 @@ export default {
     partnerRoutes,
     adminRoutes,
     otpRoutes,
+    searchRoutes,
     setupRoutes
 };
