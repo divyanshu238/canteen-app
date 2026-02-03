@@ -1,29 +1,10 @@
 import { Canteen, MenuItem } from '../models/index.js';
 
 /**
- * Escape special regex characters to prevent ReDoS attacks
- * @param {string} str - Raw search string
- * @returns {string} - Escaped string safe for regex
- */
-const escapeRegex = (str) => {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
-
-/**
  * Search for canteens and dishes
  * GET /api/search?q=pizza
  * 
- * This endpoint performs a comprehensive search across:
- * 1. Menu item names (dishes)
- * 2. Canteen names
- * 
- * Returns canteens that either:
- * - Have a name matching the query
- * - Have menu items matching the query
- * 
- * For each canteen, only matching items are included.
- * 
- * CRITICAL: Uses MongoDB $regex operator for aggregation, NOT JavaScript RegExp objects
+ * Uses $toLower for robust case-insensitive matching in aggregation
  */
 export const search = async (req, res, next) => {
     try {
@@ -60,21 +41,24 @@ export const search = async (req, res, next) => {
             });
         }
 
-        // Escape special regex characters for MongoDB $regex operator
-        const escapedQuery = escapeRegex(query);
-
-        // STRATEGY: 
-        // 1. Find all menu items matching the query (from open, approved canteens)
-        // 2. Find all canteens matching the query by name
-        // 3. Combine and return grouped results
+        // Normalize query for case-insensitive matching
+        const lowerQuery = query.toLowerCase();
 
         // Step 1: Find matching menu items with their canteens
-        // CRITICAL: Use MongoDB $regex operator, NOT JavaScript RegExp for aggregation
+        // Using $toLower and $indexOfCP for case-insensitive partial matching
         const matchingItemsAggregation = await MenuItem.aggregate([
-            // Match items by name (partial, case-insensitive)
+            // Add lowercase name field
+            {
+                $addFields: {
+                    nameLower: { $toLower: '$name' }
+                }
+            },
+            // Match items where lowercase name contains the query AND is in stock
             {
                 $match: {
-                    name: { $regex: escapedQuery, $options: 'i' },
+                    $expr: {
+                        $gte: [{ $indexOfCP: ['$nameLower', lowerQuery] }, 0]
+                    },
                     inStock: true
                 }
             },
@@ -89,7 +73,10 @@ export const search = async (req, res, next) => {
             },
             // Unwind canteen array
             {
-                $unwind: '$canteen'
+                $unwind: {
+                    path: '$canteen',
+                    preserveNullAndEmptyArrays: false
+                }
             },
             // Only include items from open, approved canteens
             {
@@ -152,13 +139,13 @@ export const search = async (req, res, next) => {
         // Step 2: Find canteens matching by name (that weren't already found via items)
         // Using Mongoose .find() which correctly handles JavaScript RegExp
         const foundCanteenIds = matchingItemsAggregation.map(r => r.canteen._id.toString());
-        const searchRegex = new RegExp(escapedQuery, 'i');
+        const searchRegex = new RegExp(lowerQuery, 'i');
 
         const matchingCanteens = await Canteen.find({
             name: searchRegex,
             isOpen: true,
             isApproved: true,
-            _id: { $nin: foundCanteenIds }  // Exclude canteens already found via items
+            _id: { $nin: foundCanteenIds }
         }).select('_id name description image rating tags isOpen preparationTime priceRange');
 
         // For canteens found by name, get their top items (limited to 3 for preview)
@@ -215,10 +202,6 @@ export const search = async (req, res, next) => {
 /**
  * Search suggestions (autocomplete)
  * GET /api/search/suggestions?q=piz
- * 
- * Returns quick suggestions for search autocomplete
- * 
- * Note: Uses Mongoose .find() which correctly handles JavaScript RegExp
  */
 export const searchSuggestions = async (req, res, next) => {
     try {
@@ -232,9 +215,8 @@ export const searchSuggestions = async (req, res, next) => {
         }
 
         const query = q.trim();
-        const escapedQuery = escapeRegex(query);
-        // Mongoose .find() correctly converts JavaScript RegExp to MongoDB query
-        const searchRegex = new RegExp(escapedQuery, 'i');
+        // Mongoose .find() correctly handles JavaScript RegExp
+        const searchRegex = new RegExp(query, 'i');
 
         // Get unique item names matching the query
         const items = await MenuItem.find({

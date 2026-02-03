@@ -5,6 +5,14 @@ import { optionalAuth } from '../middleware/auth.js';
 const router = Router();
 
 /**
+ * @route   GET /api/canteens/debug/category-check
+ * @desc    Debug endpoint to check category data
+ * @access  Public (for debugging only - remove in production)
+ * NOTE: This route MUST be before /:id to avoid matching 'debug' as an ID
+ */
+router.get('/debug/category-check', canteenController.debugCategoryCheck);
+
+/**
  * @route   GET /api/canteens/categories/all
  * @desc    Get all available categories with item counts
  * @access  Public

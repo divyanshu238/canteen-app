@@ -1,36 +1,6 @@
 import { Canteen, MenuItem } from '../models/index.js';
 import mongoose from 'mongoose';
 
-// Valid categories - case-insensitive matching will be used
-const VALID_CATEGORIES = [
-    'burger',
-    'pizza',
-    'biryani',
-    'rolls',
-    'coffee',
-    'dessert',
-    'noodles',
-    'sandwich',
-    'breakfast',
-    'beverages',
-    'snacks',
-    'main course',
-    'mains',
-    'pasta',
-    'sides',
-    'other'
-];
-
-/**
- * Normalize category for case-insensitive matching
- * @param {string} category - Raw category input
- * @returns {string} - Escaped string safe for regex
- */
-const escapeRegexString = (category) => {
-    // Escape special regex characters for safe pattern matching
-    return category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
-
 /**
  * Get all open and approved canteens
  * GET /api/canteens
@@ -136,13 +106,9 @@ export const getCanteenMenu = async (req, res, next) => {
  * Get canteens filtered by category with ONLY items in that category
  * GET /api/canteens/by-category/:category
  * 
- * This is the CRITICAL endpoint for category filtering:
- * 1. Finds all menu items matching the category (case-insensitive)
- * 2. Groups items by canteen
- * 3. Returns only canteens that have items in that category
- * 4. Each canteen includes ONLY the filtered items, not their full menu
- * 
- * IMPORTANT: Uses MongoDB $regex operator (not JavaScript RegExp) for aggregation
+ * CRITICAL FIX: Uses $toLower for reliable case-insensitive matching
+ * Instead of regex, we normalize both the query and the stored category to lowercase
+ * This is more robust and avoids MongoDB regex edge cases
  */
 export const getCanteensByCategory = async (req, res, next) => {
     try {
@@ -156,23 +122,25 @@ export const getCanteensByCategory = async (req, res, next) => {
             });
         }
 
-        const normalizedCategory = category.trim();
+        // Normalize to lowercase and trim whitespace
+        const normalizedCategory = category.trim().toLowerCase();
 
-        // Escape special regex characters for MongoDB $regex
-        // CRITICAL: Must use MongoDB $regex operator, NOT JavaScript RegExp object
-        const escapedCategory = escapeRegexString(normalizedCategory);
+        console.log('[getCanteensByCategory] Input:', category);
+        console.log('[getCanteensByCategory] Normalized:', normalizedCategory);
 
-        // Step 1: Find all menu items in this category that are in stock
-        // Using aggregation for better performance and to avoid N+1 queries
+        // ROBUST APPROACH: Use $toLower for case-insensitive matching
+        // This avoids regex serialization issues in MongoDB aggregation
         const results = await MenuItem.aggregate([
-            // Match items in the requested category that are in stock
-            // CRITICAL FIX: Use MongoDB $regex operator, not JS RegExp
+            // Add a lowercase version of the category field
+            {
+                $addFields: {
+                    categoryLower: { $toLower: { $trim: { input: '$category' } } }
+                }
+            },
+            // Match items where lowercase category equals our query AND item is in stock
             {
                 $match: {
-                    category: {
-                        $regex: `^${escapedCategory}$`,
-                        $options: 'i'  // Case-insensitive
-                    },
+                    categoryLower: normalizedCategory,
                     inStock: true
                 }
             },
@@ -187,7 +155,10 @@ export const getCanteensByCategory = async (req, res, next) => {
             },
             // Unwind the canteen array (each item has exactly one canteen)
             {
-                $unwind: '$canteen'
+                $unwind: {
+                    path: '$canteen',
+                    preserveNullAndEmptyArrays: false  // Drop items with no matching canteen
+                }
             },
             // Only include items from open and approved canteens
             {
@@ -246,6 +217,8 @@ export const getCanteensByCategory = async (req, res, next) => {
             }
         ]);
 
+        console.log('[getCanteensByCategory] Results count:', results.length);
+
         // Return the filtered results
         res.json({
             success: true,
@@ -288,10 +261,17 @@ export const getAllCategories = async (req, res, next) => {
                     'canteen.isApproved': true
                 }
             },
+            // Normalize category to lowercase for grouping
+            {
+                $addFields: {
+                    categoryLower: { $toLower: { $trim: { input: '$category' } } }
+                }
+            },
             // Get distinct categories with count
             {
                 $group: {
-                    _id: '$category',
+                    _id: '$categoryLower',
+                    originalName: { $first: '$category' },  // Keep original for display
                     itemCount: { $sum: 1 }
                 }
             },
@@ -301,7 +281,8 @@ export const getAllCategories = async (req, res, next) => {
             {
                 $project: {
                     _id: 0,
-                    name: '$_id',
+                    name: '$_id',  // lowercase slug for URL
+                    displayName: '$originalName',  // Title case for display
                     itemCount: 1
                 }
             }
@@ -317,10 +298,106 @@ export const getAllCategories = async (req, res, next) => {
     }
 };
 
+/**
+ * Debug endpoint to diagnose category issues
+ * GET /api/canteens/debug/category-check
+ */
+export const debugCategoryCheck = async (req, res, next) => {
+    try {
+        // Count total documents
+        const menuItemCount = await MenuItem.countDocuments({});
+        const canteenCount = await Canteen.countDocuments({});
+
+        // Get all distinct categories
+        const distinctCategories = await MenuItem.distinct('category');
+
+        // Get all canteens with their status
+        const canteens = await Canteen.find({}).select('name isOpen isApproved');
+
+        // Get sample menu items with their canteen reference
+        const sampleItems = await MenuItem.find({})
+            .limit(10)
+            .select('name category inStock canteenId');
+
+        // Test the aggregation for a specific category
+        const testCategory = req.query.test || 'burger';
+        const normalizedTest = testCategory.toLowerCase();
+
+        const testResults = await MenuItem.aggregate([
+            {
+                $addFields: {
+                    categoryLower: { $toLower: { $trim: { input: '$category' } } }
+                }
+            },
+            {
+                $match: {
+                    categoryLower: normalizedTest,
+                    inStock: true
+                }
+            },
+            {
+                $lookup: {
+                    from: 'canteens',
+                    localField: 'canteenId',
+                    foreignField: '_id',
+                    as: 'canteen'
+                }
+            },
+            { $unwind: '$canteen' },
+            {
+                $match: {
+                    'canteen.isOpen': true,
+                    'canteen.isApproved': true
+                }
+            },
+            {
+                $project: {
+                    name: 1,
+                    category: 1,
+                    inStock: 1,
+                    'canteen.name': 1,
+                    'canteen.isOpen': 1,
+                    'canteen.isApproved': 1
+                }
+            }
+        ]);
+
+        res.json({
+            success: true,
+            debug: {
+                totalMenuItems: menuItemCount,
+                totalCanteens: canteenCount,
+                distinctCategories,
+                canteens: canteens.map(c => ({
+                    name: c.name,
+                    isOpen: c.isOpen,
+                    isApproved: c.isApproved
+                })),
+                sampleItems: sampleItems.map(i => ({
+                    name: i.name,
+                    category: i.category,
+                    inStock: i.inStock,
+                    hasCanteenId: !!i.canteenId
+                })),
+                testQuery: {
+                    category: testCategory,
+                    normalized: normalizedTest,
+                    matchingItemsCount: testResults.length,
+                    matchingItems: testResults
+                }
+            }
+        });
+    } catch (error) {
+        console.error('[debugCategoryCheck] Error:', error);
+        next(error);
+    }
+};
+
 export default {
     getAllCanteens,
     getCanteen,
     getCanteenMenu,
     getCanteensByCategory,
-    getAllCategories
+    getAllCategories,
+    debugCategoryCheck
 };
