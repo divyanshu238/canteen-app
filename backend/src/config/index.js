@@ -21,8 +21,8 @@ if (isProduction) {
         'RAZORPAY_WEBHOOK_SECRET',
         'FRONTEND_URL',
         'REQUIRE_EMAIL_VERIFICATION',  // MANDATORY in production - EMAIL ONLY
-        'EMAIL_USER',                    // Required for OTP delivery
-        'EMAIL_PASS'                     // Required for OTP delivery
+        'RESEND_API_KEY',                // Required for OTP delivery (HTTP API)
+        'EMAIL_FROM'                     // Verified sender email
     );
 }
 
@@ -59,27 +59,12 @@ if (isProduction && process.env.OTP_DELIVERY_CHANNEL && process.env.OTP_DELIVERY
 }
 
 // ============================================
-// VALIDATE EMAIL CREDENTIALS FORMAT
+// VALIDATE RESEND API KEY
 // ============================================
-// Gmail App Passwords are 16 characters (without spaces)
-// If spaces are included, they should be removed
-if (isProduction && process.env.EMAIL_PASS) {
-    const emailPass = process.env.EMAIL_PASS;
-    const cleanedPass = emailPass.replace(/\s/g, ''); // Remove all spaces
-
-    if (emailPass !== cleanedPass) {
-        console.warn('⚠️ EMAIL_PASS contains spaces - this is unusual for Gmail App Passwords');
-        console.warn('   Gmail App Passwords should be 16 characters WITHOUT spaces');
-        console.warn('   Example: abcdefghijklmnop (not: abcd efgh ijkl mnop)');
-    }
-
-    if (cleanedPass.length !== 16) {
-        console.warn(`⚠️ EMAIL_PASS has ${cleanedPass.length} characters (expected 16 for Gmail App Password)`);
-        console.warn('   Make sure you are using a Gmail App Password, NOT your regular Gmail password');
-        console.warn('   To get an App Password:');
-        console.warn('   1. Enable 2FA on your Gmail account');
-        console.warn('   2. Go to: https://myaccount.google.com/apppasswords');
-        console.warn('   3. Generate a new App Password for "Mail"');
+if (isProduction && process.env.RESEND_API_KEY) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey.startsWith('re_')) {
+        console.warn('⚠️ RESEND_API_KEY does not start with "re_" - verify it is correct');
     }
 }
 
@@ -115,14 +100,11 @@ export const config = {
         ? process.env.CORS_ORIGINS.split(',')
         : ['http://localhost:5173', 'http://localhost:5174'],
 
-    // Email Configuration (for OTP delivery - FREE via Gmail SMTP)
-    // How to get Gmail App Password:
-    // 1. Enable 2FA on your Gmail account
-    // 2. Go to Google Account > Security > App Passwords
-    // 3. Create a new app password for "Mail"
-    emailUser: process.env.EMAIL_USER || '',
-    emailPass: process.env.EMAIL_PASS || '',
-    emailFrom: process.env.EMAIL_FROM || '',
+    // Email Configuration (for OTP delivery via Resend HTTP API)
+    // Sign up at https://resend.com for a free API key
+    // For testing, use: onboarding@resend.dev as EMAIL_FROM
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    emailFrom: process.env.EMAIL_FROM || 'Canteen Connect <onboarding@resend.dev>',
 
     // OTP Configuration - EMAIL ONLY
     otpLength: parseInt(process.env.OTP_LENGTH) || 6,
@@ -149,7 +131,7 @@ if (!isProduction) {
         jwtExpiresIn: config.jwtExpiresIn,
         razorpayConfigured: !!config.razorpayKeyId,
         requireEmailVerification: config.requireEmailVerification,
-        emailConfigured: !!(config.emailUser && config.emailPass),
+        emailConfigured: !!config.resendApiKey,
     });
 }
 

@@ -1,147 +1,42 @@
 /**
  * Email Service for OTP delivery
  * 
- * Uses Nodemailer with Gmail SMTP (FREE forever)
+ * Uses Resend HTTP API (works on Render FREE tier)
  * 
- * PRODUCTION-HARDENED VERSION:
- * - Explicit SMTP configuration (no silent failures)
- * - transporter.verify() on startup
- * - Full error propagation
- * - TLS configuration for cloud environments (Render, Railway, etc.)
+ * IMPORTANT: Render blocks SMTP ports (465, 587). Resend uses HTTPS.
  * 
  * Configuration:
- * - EMAIL_USER: Gmail address
- * - EMAIL_PASS: App Password (16-char, no spaces) - NOT regular password
- * - EMAIL_FROM: Display name for sender
+ * - RESEND_API_KEY: API key from resend.com
+ * - EMAIL_FROM: Verified sender email (e.g., "onboarding@resend.dev" for testing)
  * 
- * How to get Gmail App Password:
- * 1. Enable 2FA on your Gmail account (REQUIRED)
- * 2. Go to Google Account > Security > 2-Step Verification > App Passwords
- * 3. Create a new app password for "Mail" on "Other (Custom name)"
- * 4. Copy the 16-character password (remove spaces if any)
+ * STARTUP BEHAVIOR:
+ * - Does NOT block server startup if email service is unreachable
+ * - Email delivery errors fail individual REQUESTS, not BOOT
  */
 
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import config from '../config/index.js';
 
-// Singleton transporter instance
-let transporterInstance = null;
-let transporterVerified = false;
+// Resend client instance (lazy initialized)
+let resendClient = null;
 
 /**
- * Create and verify email transporter
- * Uses explicit Gmail SMTP configuration for production reliability
- * 
- * RENDER COMPATIBILITY:
- * - Render free tier BLOCKS port 465 (SSL) → causes ETIMEDOUT
- * - Use port 587 (STARTTLS) instead → works on all cloud platforms
+ * Get or create Resend client
  */
-const createTransporter = () => {
-    // Gmail SMTP configuration - RENDER COMPATIBLE
-    // Port 587 with STARTTLS works on Render, Railway, Heroku, etc.
-    const transporterConfig = {
-        host: 'smtp.gmail.com',
-        port: 587,              // STARTTLS port (NOT 465 which is blocked on Render)
-        secure: false,          // false for port 587 - upgrades to TLS via STARTTLS
-        requireTLS: true,       // Require STARTTLS upgrade (security)
-        auth: {
-            user: config.emailUser,
-            pass: config.emailPass
-        },
-        // TLS settings for cloud environments
-        tls: {
-            // Allow self-signed certs (some cloud providers need this)
-            rejectUnauthorized: false,
-            // Minimum TLS version for security
-            minVersion: 'TLSv1.2'
-        },
-        // Increased timeouts for cloud environments
-        connectionTimeout: 30000, // 30 seconds (Render can be slow)
-        greetingTimeout: 30000,   // 30 seconds for SMTP greeting
-        socketTimeout: 30000,     // 30 seconds for socket operations
-        // Debug logging in development
-        debug: !config.isProduction,
-        logger: !config.isProduction
-    };
-
-    console.log('📧 Creating SMTP transporter with config:');
-    console.log(`   Host: ${transporterConfig.host}`);
-    console.log(`   Port: ${transporterConfig.port}`);
-    console.log(`   Secure: ${transporterConfig.secure} (STARTTLS)`);
-    console.log(`   RequireTLS: ${transporterConfig.requireTLS}`);
-    console.log(`   User: ${config.emailUser ? config.emailUser.slice(0, 3) + '***' : '(not set)'}`);
-    console.log(`   Pass: ${config.emailPass ? '[SET - ' + config.emailPass.length + ' chars]' : '(not set)'}`);
-
-    return nodemailer.createTransport(transporterConfig);
+const getResendClient = () => {
+    if (!resendClient && config.resendApiKey) {
+        resendClient = new Resend(config.resendApiKey);
+        console.log('📧 Resend client initialized');
+    }
+    return resendClient;
 };
 
 /**
- * Get or create the transporter singleton
- * Verifies connection on first use
- */
-const getTransporter = async () => {
-    if (!transporterInstance) {
-        transporterInstance = createTransporter();
-    }
-
-    // Verify transporter on first use
-    if (!transporterVerified) {
-        console.log('🔍 Verifying SMTP connection...');
-        try {
-            await transporterInstance.verify();
-            transporterVerified = true;
-            console.log('✅ SMTP connection verified successfully');
-        } catch (error) {
-            console.error('❌ SMTP VERIFICATION FAILED:');
-            console.error(`   Error: ${error.message}`);
-            console.error(`   Code: ${error.code || 'N/A'}`);
-            console.error(`   Response: ${error.response || 'N/A'}`);
-            console.error(`   ResponseCode: ${error.responseCode || 'N/A'}`);
-
-            // Reset transporter for retry
-            transporterInstance = null;
-            transporterVerified = false;
-
-            // Re-throw with clear message
-            throw new Error(`SMTP verification failed: ${error.message}`);
-        }
-    }
-
-    return transporterInstance;
-};
-
-/**
- * Verify SMTP connection on startup (call from index.js)
- * This should be called during app initialization to fail fast
- */
-export const verifyEmailTransporter = async () => {
-    if (!config.emailUser || !config.emailPass) {
-        if (config.isProduction) {
-            throw new Error('EMAIL_USER and EMAIL_PASS are required in production');
-        }
-        console.warn('⚠️ Email credentials not configured - emails will be logged to console in development');
-        return false;
-    }
-
-    try {
-        await getTransporter();
-        console.log('✅ Email service ready');
-        return true;
-    } catch (error) {
-        console.error('❌ Email service initialization failed:', error.message);
-        if (config.isProduction) {
-            throw error; // Fail fast in production
-        }
-        return false;
-    }
-};
-
-/**
- * Send OTP via Email
+ * Send OTP via Email using Resend HTTP API
  * @param {string} email - Recipient email address
  * @param {string} otp - OTP to send
  * @param {string} purpose - Purpose of OTP
- * @returns {Promise<{success: boolean, messageId?: string, error?: string}>}
+ * @returns {Promise<{success: boolean, messageId?: string, error?: string, errorCode?: string, errorDetails?: string}>}
  */
 export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
     // Validate email
@@ -149,12 +44,13 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
         console.error('❌ EMAIL SEND FAILED: Invalid email address');
         return {
             success: false,
-            error: 'Invalid email address'
+            error: 'Invalid email address',
+            errorCode: 'INVALID_EMAIL'
         };
     }
 
     // Check configuration
-    if (!config.emailUser || !config.emailPass) {
+    if (!config.resendApiKey) {
         // Fallback to console logging in development
         if (!config.isProduction) {
             console.log('\n' + '='.repeat(50));
@@ -173,113 +69,105 @@ export const sendOTPEmail = async (email, otp, purpose = 'verification') => {
             };
         }
 
-        console.error('❌ EMAIL SEND FAILED: Email credentials not configured in production');
+        console.error('❌ EMAIL SEND FAILED: RESEND_API_KEY not configured');
         return {
             success: false,
-            error: 'Email service not configured'
+            error: 'Email service not configured',
+            errorCode: 'EMAIL_NOT_CONFIGURED'
         };
     }
 
     try {
+        const maskedEmail = maskEmailForLog(email);
         console.log(`📧 EMAIL SEND ATTEMPT:`);
-        console.log(`   From: ${config.emailFrom || config.emailUser}`);
-        console.log(`   To: ${email.slice(0, 3)}***${email.slice(email.indexOf('@'))}`);
+        console.log(`   From: ${config.emailFrom}`);
+        console.log(`   To: ${maskedEmail}`);
         console.log(`   Purpose: ${purpose}`);
         console.log(`   Time: ${new Date().toISOString()}`);
 
-        // Get verified transporter
-        const transporter = await getTransporter();
+        const client = getResendClient();
+        if (!client) {
+            console.error('❌ EMAIL SEND FAILED: Could not initialize Resend client');
+            return {
+                success: false,
+                error: 'Email client initialization failed',
+                errorCode: 'CLIENT_INIT_FAILED'
+            };
+        }
 
-        const mailOptions = {
-            from: config.emailFrom || `Canteen Connect <${config.emailUser}>`,
-            to: email,
-            subject: `Your Canteen Connect Verification Code: ${otp}`,
-            text: getPlainTextEmail(otp, purpose),
-            html: getHtmlEmail(otp, purpose),
-            // Add envelope for explicit sender
-            envelope: {
-                from: config.emailUser,
-                to: email
-            }
-        };
-
-        console.log(`📤 Sending email via SMTP...`);
         const startTime = Date.now();
 
-        const result = await transporter.sendMail(mailOptions);
+        // Send email via Resend HTTP API
+        const { data, error } = await client.emails.send({
+            from: config.emailFrom,
+            to: [email],
+            subject: `Your Canteen Connect Verification Code: ${otp}`,
+            text: getPlainTextEmail(otp, purpose),
+            html: getHtmlEmail(otp, purpose)
+        });
 
         const elapsed = Date.now() - startTime;
 
-        // Verify result has required fields
-        if (!result || !result.messageId) {
-            console.error('❌ EMAIL SEND FAILED: No messageId in response');
-            console.error(`   Response: ${JSON.stringify(result)}`);
+        // Handle Resend API error
+        if (error) {
+            console.error(`❌ EMAIL SEND FAILED (Resend API Error):`);
+            console.error(`   Error: ${error.message || JSON.stringify(error)}`);
+            console.error(`   Name: ${error.name || 'N/A'}`);
+            console.error(`   StatusCode: ${error.statusCode || 'N/A'}`);
+
             return {
                 success: false,
-                error: 'Email send returned empty response'
+                error: `Failed to send email: ${error.message || 'Unknown error'}`,
+                errorCode: 'EMAIL_DELIVERY_FAILED',
+                errorDetails: JSON.stringify(error)
             };
         }
 
-        // Check for rejected recipients
-        if (result.rejected && result.rejected.length > 0) {
-            console.error('❌ EMAIL REJECTED by server:');
-            console.error(`   Rejected: ${result.rejected.join(', ')}`);
+        // Verify we got a response with an ID
+        if (!data || !data.id) {
+            console.error('❌ EMAIL SEND FAILED: No message ID in response');
+            console.error(`   Response: ${JSON.stringify(data)}`);
             return {
                 success: false,
-                error: `Email rejected: ${result.rejected.join(', ')}`
+                error: 'Email send returned empty response',
+                errorCode: 'EMPTY_RESPONSE'
             };
         }
 
-        // Check accepted recipients
-        if (!result.accepted || result.accepted.length === 0) {
-            console.error('❌ EMAIL NOT ACCEPTED: No recipients accepted');
-            console.error(`   Response: ${JSON.stringify(result)}`);
-            return {
-                success: false,
-                error: 'Email was not accepted by the server'
-            };
-        }
-
-        // Log success with full details
-        const [localPart, domain] = email.split('@');
-        const masked = localPart.slice(0, 2) + '***@' + domain;
-        console.log(`✅ EMAIL SENT successfully to ${masked}`);
-        console.log(`   MessageId: ${result.messageId}`);
-        console.log(`   Accepted: ${result.accepted.join(', ')}`);
-        console.log(`   Response: ${result.response}`);
+        // Success!
+        console.log(`✅ EMAIL SENT successfully to ${maskedEmail}`);
+        console.log(`   MessageId: ${data.id}`);
+        console.log(`   Provider: resend`);
         console.log(`   Elapsed: ${elapsed}ms`);
 
         return {
             success: true,
-            messageId: result.messageId,
-            accepted: result.accepted,
-            response: result.response,
-            provider: 'gmail'
+            messageId: data.id,
+            provider: 'resend'
         };
     } catch (error) {
-        // Full error logging - NEVER swallow errors
-        console.error(`❌ EMAIL SEND FAILED:`);
+        // Catch any unexpected errors
+        console.error(`❌ EMAIL SEND FAILED (Exception):`);
         console.error(`   Error: ${error.message}`);
-        console.error(`   Code: ${error.code || 'N/A'}`);
-        console.error(`   Command: ${error.command || 'N/A'}`);
-        console.error(`   Response: ${error.response || 'N/A'}`);
-        console.error(`   ResponseCode: ${error.responseCode || 'N/A'}`);
         console.error(`   Stack: ${error.stack}`);
-
-        // Reset transporter on auth errors to force re-verification
-        if (error.code === 'EAUTH' || error.responseCode === 535) {
-            console.error('🔄 Resetting transporter due to auth error...');
-            transporterInstance = null;
-            transporterVerified = false;
-        }
 
         return {
             success: false,
             error: `Failed to send email: ${error.message}`,
-            errorCode: error.code,
-            errorDetails: error.response
+            errorCode: 'EMAIL_DELIVERY_FAILED',
+            errorDetails: error.message
         };
     }
+};
+
+/**
+ * Mask email for logging
+ */
+const maskEmailForLog = (email) => {
+    if (!email) return '(no email)';
+    const [localPart, domain] = email.split('@');
+    if (!domain) return email;
+    return localPart.slice(0, 2) + '***@' + domain;
 };
 
 /**
@@ -351,6 +239,5 @@ const getHtmlEmail = (otp, purpose) => {
 };
 
 export default {
-    sendOTPEmail,
-    verifyEmailTransporter
+    sendOTPEmail
 };

@@ -11,7 +11,7 @@
  * - Detailed logging for debugging
  * 
  * Email is delivered via:
- * - Nodemailer + Gmail SMTP (FREE forever)
+ * - Resend HTTP API (works on Render FREE tier)
  */
 
 import { sendOTPEmail } from './email.service.js';

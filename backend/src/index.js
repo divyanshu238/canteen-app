@@ -34,7 +34,6 @@ import { connectDB, disconnectDB } from './config/db.js';
 import { setupRoutes } from './routes/index.js';
 import { notFound, errorHandler } from './middleware/error.js';
 import { seedDatabase } from './seed.js';
-import { verifyEmailTransporter } from './services/email.service.js';
 
 // Initialize Express app
 const app = express();
@@ -164,23 +163,17 @@ const initDatabase = async () => {
     }
 
     // =====================
-    // VERIFY EMAIL SERVICE (FAIL FAST)
+    // EMAIL SERVICE NOTE
     // =====================
-    // In production, this will throw if SMTP credentials are invalid,
-    // preventing the app from starting with broken email delivery.
-    try {
-        const emailReady = await verifyEmailTransporter();
-        if (emailReady) {
-            console.log('✅ Email service: READY');
-        } else {
-            console.warn('⚠️ Email service: NOT CONFIGURED (development mode)');
-        }
-    } catch (error) {
-        console.error('❌ Email service verification failed:', error.message);
-        if (config.isProduction) {
-            console.error('   FATAL: Cannot start in production without working email service');
-            process.exit(1);
-        }
+    // Email service uses Resend HTTP API.
+    // We do NOT verify email on startup - errors fail individual requests, not boot.
+    // This prevents Render's reverse proxy from blocking startup due to connection tests.
+    if (config.resendApiKey) {
+        console.log('✅ Email service: Resend API configured');
+    } else if (!config.isProduction) {
+        console.warn('⚠️ Email service: NOT CONFIGURED (OTPs will be logged to console)');
+    } else {
+        console.error('❌ Email service: RESEND_API_KEY not set (emails will fail)');
     }
 };
 
