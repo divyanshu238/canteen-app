@@ -96,9 +96,29 @@ async function bootstrapApplication() {
         app.use('/api/', limiter);
 
         // --- CORS ---
+        // --- CORS ---
         const corsOrigin = process.env.FRONTEND_URL || 'https://canteen-app-nine.vercel.app';
         app.use(cors({
-            origin: process.env.NODE_ENV === 'production' ? corsOrigin : true,
+            origin: (origin, callback) => {
+                // Allow requests with no origin (like mobile apps or curl requests)
+                if (!origin) return callback(null, true);
+
+                // Allow allowed origins
+                const allowedOrigins = [
+                    'http://localhost:5173',
+                    'http://localhost:5174',
+                    'http://localhost:5000',
+                    corsOrigin,
+                    'https://canteen-app-tr5h.vercel.app' // Explicitly from screenshot
+                ];
+
+                if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+                    callback(null, true);
+                } else {
+                    console.log('❌ CORS Blocked:', origin);
+                    callback(new Error('Not allowed by CORS'));
+                }
+            },
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
             allowedHeaders: ['Content-Type', 'Authorization']
