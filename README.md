@@ -37,7 +37,7 @@ A full-stack food ordering application similar to Swiggy/Zomato, built for campu
 ### Backend
 - Node.js + Express
 - MongoDB + Mongoose
-- JWT Authentication (with refresh tokens)
+- Classic Email/Password Authentication (Bcrypt + JWT)
 - Socket.IO (Real-time updates)
 - Razorpay SDK (Payments)
 - Helmet + Rate Limiting (Security)
