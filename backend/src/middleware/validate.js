@@ -1,7 +1,6 @@
 /**
  * Request validation middleware using simple validation
- * 
- * FIREBASE PHONE OTP: No email/password validation needed for auth
+ * Validation Middleware
  */
 
 import { AppError } from './error.js';
@@ -78,8 +77,8 @@ export const validate = (schema) => {
 
 // Common validation schemas
 export const schemas = {
-    // Note: signup/login validation is handled by Firebase middleware
-    // These schemas are kept for backward compatibility with other routes
+    // Note: signup/login validation is now handled by auth.controller.js
+    // These schemas are reusable for strict validation if needed
     signup: {
         name: { required: true, type: 'string', minLength: 2, maxLength: 50 },
         role: { type: 'string', enum: ['student', 'partner'] }

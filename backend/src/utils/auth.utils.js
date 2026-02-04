@@ -1,10 +1,7 @@
 /**
- * Authentication Utilities - FIREBASE PHONE OTP
+ * Authentication Utilities
  * 
- * Utility functions for phone-based authentication.
- * 
- * NOTE: All OTP logic is handled by Firebase.
- * Backend only verifies Firebase ID tokens.
+ * Utility functions for authentication and input validation.
  */
 
 /**

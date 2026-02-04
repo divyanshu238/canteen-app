@@ -148,13 +148,9 @@ async function bootstrapApplication() {
         await connectDB();
         console.log('[BOOT] MongoDB connected');
 
-        // --- Firebase ---
-        const { initializeFirebase } = await import('./config/firebase.js');
-        const firebaseOk = initializeFirebase();
-        if (!firebaseOk && process.env.NODE_ENV === 'production') {
-            throw new Error('Firebase initialization failed');
-        }
-        console.log(`[BOOT] Firebase: ${firebaseOk ? 'ready' : 'skipped'}`);
+        // --- Firebase REMOVED ---
+        // Classic auth is now used.
+        console.log('[BOOT] Auth system: Email/Password (Classic)');
 
         // --- Seed database (dev only) ---
         if (process.env.NODE_ENV !== 'production') {
