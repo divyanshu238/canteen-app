@@ -1,24 +1,12 @@
 /**
- * Authentication Service - Email/Password Authentication
+ * Authentication Service - Classic Email/Password Auth
  * 
- * NO OTP. NO reCAPTCHA. NO Phone Verification.
- * 
- * Simple email + password flow:
- * 1. User enters email + password
- * 2. Firebase creates/authenticates user
- * 3. Get Firebase ID token
- * 4. Send token to backend with user details
- * 5. Backend creates/returns user and issues JWT
+ * NO Firebase. NO OTP. NO third-party auth.
+ * Simple API calls to backend with JWT authentication.
  */
 
 import axios from 'axios';
 import config from '../config';
-import {
-    signUpWithEmail,
-    signInWithEmail,
-    isFirebaseReady,
-    firebaseSignOut
-} from '../firebase';
 
 // Types
 export interface AuthUser {
@@ -48,58 +36,19 @@ export interface AuthError {
 }
 
 /**
- * Check if Firebase is properly configured
- */
-export const isFirebaseConfigured = (): boolean => {
-    return isFirebaseReady();
-};
-
-/**
- * Map Firebase error codes to user-friendly messages
- */
-const mapFirebaseError = (error: any): string => {
-    const errorCode = error.code || 'unknown';
-
-    switch (errorCode) {
-        case 'auth/email-already-in-use':
-            return 'This email is already registered. Please login instead.';
-        case 'auth/invalid-email':
-            return 'Please enter a valid email address.';
-        case 'auth/operation-not-allowed':
-            return 'Email/password accounts are not enabled.';
-        case 'auth/weak-password':
-            return 'Password should be at least 6 characters.';
-        case 'auth/user-disabled':
-            return 'This account has been disabled.';
-        case 'auth/user-not-found':
-            return 'No account found with this email. Please signup first.';
-        case 'auth/wrong-password':
-            return 'Incorrect password. Please try again.';
-        case 'auth/invalid-credential':
-            return 'Invalid email or password. Please try again.';
-        case 'auth/too-many-requests':
-            return 'Too many failed attempts. Please try again later.';
-        case 'auth/network-request-failed':
-            return 'Network error. Please check your connection.';
-        default:
-            return error.message || 'Authentication failed. Please try again.';
-    }
-};
-
-/**
- * Sign up with email and password
+ * Register a new user
  * 
- * @param email - User email
- * @param password - User password
- * @param name - User full name
- * @param phone - User phone number (stored only, not verified)
+ * @param name - User's full name
+ * @param email - User's email
+ * @param phone - User's phone number (stored only, not verified)
+ * @param password - User's password
  * @param role - User role (student or partner)
  */
-export const signupWithEmailPassword = async (
-    email: string,
-    password: string,
+export const register = async (
     name: string,
+    email: string,
     phone: string,
+    password: string,
     role: 'student' | 'partner' = 'student'
 ): Promise<{
     success: boolean;
@@ -108,70 +57,49 @@ export const signupWithEmailPassword = async (
 }> => {
     try {
         // Validate inputs
-        if (!email || !email.includes('@')) {
-            return { success: false, error: 'Please enter a valid email address' };
-        }
-
-        if (!password || password.length < 6) {
-            return { success: false, error: 'Password must be at least 6 characters' };
-        }
-
         if (!name || name.trim().length < 2) {
             return { success: false, error: 'Name must be at least 2 characters' };
+        }
+
+        if (!email || !email.includes('@')) {
+            return { success: false, error: 'Please enter a valid email address' };
         }
 
         if (!phone || phone.replace(/\D/g, '').length < 10) {
             return { success: false, error: 'Please enter a valid phone number' };
         }
 
-        // Create Firebase user
-        const userCredential = await signUpWithEmail(email, password);
-
-        // Get Firebase ID token
-        const idToken = await userCredential.user.getIdToken();
-        if (!idToken) {
-            return { success: false, error: 'Failed to get authentication token' };
+        if (!password || password.length < 6) {
+            return { success: false, error: 'Password must be at least 6 characters' };
         }
 
         // Format phone number
         const cleanPhone = phone.replace(/\D/g, '');
         const formattedPhone = cleanPhone.length === 10 ? `+91${cleanPhone}` : `+${cleanPhone}`;
 
-        // Call backend to create user
-        const backendUrl = config.apiUrl;
+        // Call backend register endpoint
         const response = await axios.post<AuthResponse>(
-            `${backendUrl}/api/auth/signup`,
+            `${config.apiUrl}/api/auth/register`,
             {
                 name: name.trim(),
+                email: email.toLowerCase().trim(),
                 phone: formattedPhone,
+                password,
                 role
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
             }
         );
 
-        console.log('✅ Signup successful');
+        console.log('✅ Registration successful');
         return {
             success: true,
             data: response.data.data
         };
     } catch (error: any) {
-        console.error('❌ Signup failed:', error);
-
-        // Handle Firebase errors
-        if (error.code?.startsWith('auth/')) {
-            return { success: false, error: mapFirebaseError(error) };
-        }
-
-        // Handle backend errors
+        console.error('❌ Registration failed:', error);
         const errorResponse = error.response?.data as AuthError | undefined;
         return {
             success: false,
-            error: errorResponse?.error || 'Signup failed. Please try again.'
+            error: errorResponse?.error || 'Registration failed. Please try again.'
         };
     }
 };
@@ -179,10 +107,10 @@ export const signupWithEmailPassword = async (
 /**
  * Login with email and password
  * 
- * @param email - User email
- * @param password - User password
+ * @param email - User's email
+ * @param password - User's password
  */
-export const loginWithEmailPassword = async (
+export const login = async (
     email: string,
     password: string
 ): Promise<{
@@ -200,25 +128,12 @@ export const loginWithEmailPassword = async (
             return { success: false, error: 'Password is required' };
         }
 
-        // Sign in with Firebase
-        const userCredential = await signInWithEmail(email, password);
-
-        // Get Firebase ID token
-        const idToken = await userCredential.user.getIdToken();
-        if (!idToken) {
-            return { success: false, error: 'Failed to get authentication token' };
-        }
-
-        // Call backend to login
-        const backendUrl = config.apiUrl;
+        // Call backend login endpoint
         const response = await axios.post<AuthResponse>(
-            `${backendUrl}/api/auth/login`,
-            {},
+            `${config.apiUrl}/api/auth/login`,
             {
-                headers: {
-                    'Authorization': `Bearer ${idToken}`,
-                    'Content-Type': 'application/json'
-                }
+                email: email.toLowerCase().trim(),
+                password
             }
         );
 
@@ -229,31 +144,41 @@ export const loginWithEmailPassword = async (
         };
     } catch (error: any) {
         console.error('❌ Login failed:', error);
-
-        // Handle Firebase errors
-        if (error.code?.startsWith('auth/')) {
-            return { success: false, error: mapFirebaseError(error) };
-        }
-
-        // Handle backend errors
         const errorResponse = error.response?.data as AuthError | undefined;
         return {
             success: false,
-            error: errorResponse?.error || 'Login failed. Please try again.'
+            error: errorResponse?.error || 'Invalid email or password.'
         };
     }
 };
 
 /**
- * Sign out and clear session
+ * Logout - Clear local storage
  */
-export const signOut = async (): Promise<void> => {
-    await firebaseSignOut();
+export const logout = (): void => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    console.log('✅ Logged out');
+};
+
+/**
+ * Check if user is authenticated
+ */
+export const isAuthenticated = (): boolean => {
+    return !!localStorage.getItem('accessToken');
+};
+
+/**
+ * Get stored access token
+ */
+export const getAccessToken = (): string | null => {
+    return localStorage.getItem('accessToken');
 };
 
 export default {
-    isFirebaseConfigured,
-    signupWithEmailPassword,
-    loginWithEmailPassword,
-    signOut
+    register,
+    login,
+    logout,
+    isAuthenticated,
+    getAccessToken
 };

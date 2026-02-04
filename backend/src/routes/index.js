@@ -1,8 +1,7 @@
 /**
- * Routes Index - EMAIL/PASSWORD AUTHENTICATION
+ * Routes Index - Classic Email/Password Authentication
  * 
- * All authentication is handled via Firebase Email/Password.
- * NO OTP routes. NO phone verification routes.
+ * NO Firebase. NO OTP. NO third-party auth.
  */
 
 import authRoutes from './auth.routes.js';

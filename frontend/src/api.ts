@@ -69,9 +69,9 @@ api.interceptors.response.use(
     }
 );
 
-// Auth API - Firebase Phone OTP based
+// Auth API - Classic Email/Password Auth
 export const authAPI = {
-    // Login and signup are handled by Firebase + auth.service.ts
+    // Login and signup are handled by auth.service.ts
     // These are kept for token refresh and session management
 
     logout: (refreshToken?: string) =>

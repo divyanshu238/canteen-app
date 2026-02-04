@@ -1,24 +1,19 @@
 /**
- * Login/Signup Page - Email + Password Authentication
+ * Login/Signup Page - Classic Email + Password Authentication
  * 
- * NO OTP. NO reCAPTCHA. NO Phone Verification for login.
+ * NO Firebase. NO OTP. NO third-party auth.
+ * Simple email + password with backend validation.
  * 
  * SIGNUP: Name + Email + Phone + Password
  * LOGIN: Email + Password only
- * 
- * Phone number is collected at signup but NOT used for authentication.
  */
 
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { Mail, Lock, Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import {
-    signupWithEmailPassword,
-    loginWithEmailPassword,
-    isFirebaseConfigured
-} from '../services/auth.service';
-import { login } from '../store';
+import { register, login } from '../services/auth.service';
+import { login as storeLogin } from '../store';
 
 type AuthMode = 'login' | 'register';
 type Role = 'student' | 'partner';
@@ -89,9 +84,9 @@ export const Login = () => {
             let result;
 
             if (mode === 'register') {
-                result = await signupWithEmailPassword(email, password, name, phone, role);
+                result = await register(name, email, phone, password, role);
             } else {
-                result = await loginWithEmailPassword(email, password);
+                result = await login(email, password);
             }
 
             if (!result.success) {
@@ -102,8 +97,12 @@ export const Login = () => {
 
             const { user, accessToken, refreshToken } = result.data!;
 
+            // Store tokens in localStorage
+            localStorage.setItem('accessToken', accessToken);
+            localStorage.setItem('refreshToken', refreshToken);
+
             // Dispatch login to Redux store
-            dispatch(login({
+            dispatch(storeLogin({
                 user: {
                     id: user.id,
                     name: user.name,
@@ -203,14 +202,6 @@ export const Login = () => {
                                 }
                             </p>
                         </div>
-
-                        {/* Firebase Config Warning */}
-                        {!isFirebaseConfigured() && (
-                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-700 text-sm flex items-center gap-2">
-                                <AlertCircle size={18} />
-                                <span>Firebase configuration missing. Authentication disabled.</span>
-                            </div>
-                        )}
 
                         {/* Error Message */}
                         {error && (
@@ -356,7 +347,7 @@ export const Login = () => {
                             {/* Submit Button */}
                             <button
                                 type="submit"
-                                disabled={isLoading || !isFirebaseConfigured()}
+                                disabled={isLoading}
                                 className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {isLoading ? (
@@ -387,7 +378,7 @@ export const Login = () => {
                         {/* Security Notice */}
                         <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
                             <p className="text-xs text-gray-500 text-center">
-                                🔒 Secured by Firebase Authentication
+                                🔒 Your password is securely encrypted
                             </p>
                         </div>
                     </div>

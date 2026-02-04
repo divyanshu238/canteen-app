@@ -1,7 +1,8 @@
 /**
  * Production-ready configuration
  * 
- * EMAIL/PASSWORD AUTHENTICATION SYSTEM
+ * CLASSIC EMAIL/PASSWORD AUTHENTICATION
+ * NO Firebase. NO OTP. NO third-party auth.
  * 
  * NOTE: dotenv.config() is called in index.js BEFORE this module is imported.
  * Do NOT call dotenv.config() here - environment variables are already loaded.
@@ -19,11 +20,8 @@ if (isProduction) {
         'RAZORPAY_KEY_ID',
         'RAZORPAY_KEY_SECRET',
         'RAZORPAY_WEBHOOK_SECRET',
-        'FRONTEND_URL',
-        // Firebase configuration (MANDATORY for email/password auth)
-        'FIREBASE_PROJECT_ID',
-        'FIREBASE_CLIENT_EMAIL',
-        'FIREBASE_PRIVATE_KEY'
+        'FRONTEND_URL'
+        // NOTE: Firebase removed - no longer needed
     );
 }
 
@@ -36,19 +34,7 @@ if (missingVars.length > 0) {
 }
 
 // ============================================
-// VALIDATE FIREBASE PRIVATE KEY FORMAT
-// ============================================
-if (isProduction && process.env.FIREBASE_PRIVATE_KEY) {
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
-    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-        console.error('❌ FATAL: FIREBASE_PRIVATE_KEY does not contain a valid PEM-formatted private key');
-        console.error('   Make sure to include the BEGIN/END markers and preserve newlines');
-        process.exit(1);
-    }
-}
-
-// ============================================
-// REJECT DEPRECATED CONFIG (OTP NO LONGER USED)
+// REJECT DEPRECATED CONFIG
 // ============================================
 const deprecatedVars = [
     'REQUIRE_EMAIL_VERIFICATION',
@@ -56,12 +42,16 @@ const deprecatedVars = [
     'RESEND_API_KEY',
     'EMAIL_USER',
     'EMAIL_PASS',
-    'OTP_DELIVERY_CHANNEL'
+    'OTP_DELIVERY_CHANNEL',
+    // Firebase is now deprecated
+    'FIREBASE_PROJECT_ID',
+    'FIREBASE_CLIENT_EMAIL',
+    'FIREBASE_PRIVATE_KEY'
 ];
 
 deprecatedVars.forEach(varName => {
     if (process.env[varName]) {
-        console.warn(`⚠️  DEPRECATED: ${varName} is no longer used. Using email/password authentication.`);
+        console.warn(`⚠️  DEPRECATED: ${varName} is no longer used. Using classic email/password authentication.`);
     }
 });
 
@@ -77,7 +67,7 @@ export const config = {
     // Database
     mongoUri: process.env.MONGO_URI || '',
 
-    // JWT (for session tokens AFTER Firebase auth)
+    // JWT (for authentication)
     jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production',
     jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'dev_refresh_secret_change_in_production',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1h',
@@ -95,14 +85,7 @@ export const config = {
     // CORS
     corsOrigins: process.env.CORS_ORIGINS
         ? process.env.CORS_ORIGINS.split(',')
-        : ['http://localhost:5173', 'http://localhost:5174'],
-
-    // Firebase Configuration
-    firebase: {
-        projectId: process.env.FIREBASE_PROJECT_ID || '',
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
-        privateKey: process.env.FIREBASE_PRIVATE_KEY || ''
-    }
+        : ['http://localhost:5173', 'http://localhost:5174']
 };
 
 // Log config (without secrets) in development
@@ -113,8 +96,7 @@ if (!isProduction) {
         frontendUrl: config.frontendUrl,
         mongoUri: config.mongoUri ? config.mongoUri.replace(/\/\/.*@/, '//***@') : '(not set)',
         jwtExpiresIn: config.jwtExpiresIn,
-        razorpayConfigured: !!config.razorpayKeyId,
-        firebaseConfigured: !!(config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey),
+        razorpayConfigured: !!config.razorpayKeyId
     });
 }
 

@@ -1,24 +1,22 @@
 /**
- * Authentication Controller - EMAIL/PASSWORD AUTHENTICATION
+ * Authentication Controller - Classic Email/Password Auth
  * 
- * NO OTP. NO Phone Verification. NO reCAPTCHA.
+ * NO Firebase. NO OTP. NO third-party auth.
  * 
- * ARCHITECTURE:
- * 1. Frontend authenticates with Firebase using email/password
- * 2. Backend receives Firebase ID token
- * 3. Backend verifies token and extracts email
- * 4. Backend creates/finds user by email
- * 5. Backend issues JWT for session management
- * 
- * Phone number is stored for contact purposes only, NOT for authentication.
+ * Simple authentication using:
+ * - bcrypt for password hashing
+ * - JWT for session tokens
  */
 
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import { User, RefreshToken, Canteen } from '../models/index.js';
 
+const BCRYPT_ROUNDS = 12;
+
 /**
- * Generate JWT tokens (for session management AFTER Firebase auth)
+ * Generate JWT tokens for session management
  */
 export const generateTokens = async (user) => {
     const accessToken = jwt.sign(
@@ -59,7 +57,6 @@ export const formatUserResponse = (user) => ({
     name: user.name,
     email: user.email,
     phoneNumber: user.phoneNumber,
-    firebaseUid: user.firebaseUid,
     role: user.role,
     canteenId: user.canteenId?.toString(),
     isApproved: user.isApproved,
@@ -67,7 +64,7 @@ export const formatUserResponse = (user) => ({
 });
 
 /**
- * Mask email for logging (e.g., j***@example.com)
+ * Mask email for logging
  */
 const maskEmail = (email) => {
     if (!email || !email.includes('@')) return '***';
@@ -77,27 +74,14 @@ const maskEmail = (email) => {
 };
 
 /**
- * Signup with Email/Password
- * POST /api/auth/signup
+ * Register new user
+ * POST /api/auth/register
  * 
- * FLOW:
- * 1. Receive Firebase ID token (already verified by middleware)
- * 2. Extract email and uid from token
- * 3. Check if email already exists
- * 4. Create new user with email as unique identifier
- * 5. Issue JWT tokens for session management
- * 
- * Headers: Authorization: Bearer <firebase_id_token>
- * Body: { name: string, phone: string, role?: 'student' | 'partner' }
+ * Body: { name, email, phone, password, role? }
  */
-export const signup = async (req, res, next) => {
+export const register = async (req, res, next) => {
     try {
-        const { name, phone, role = 'student' } = req.body;
-        const { firebaseUser } = req;
-
-        // Extract from verified Firebase token
-        const email = firebaseUser.email;
-        const firebaseUid = firebaseUser.uid;
+        const { name, email, phone, password, role = 'student' } = req.body;
 
         // Validate required fields
         if (!name || name.trim().length < 2) {
@@ -108,22 +92,27 @@ export const signup = async (req, res, next) => {
             });
         }
 
-        // Email is REQUIRED
-        if (!email) {
-            console.error(`❌ SIGNUP BLOCKED: No email in Firebase token (uid: ${firebaseUid})`);
+        if (!email || !email.includes('@')) {
             return res.status(400).json({
                 success: false,
-                error: 'Email is required for signup',
+                error: 'Valid email is required',
                 code: 'EMAIL_REQUIRED'
             });
         }
 
-        // Phone number is REQUIRED
         if (!phone) {
             return res.status(400).json({
                 success: false,
                 error: 'Phone number is required',
                 code: 'PHONE_REQUIRED'
+            });
+        }
+
+        if (!password || password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                error: 'Password must be at least 6 characters',
+                code: 'PASSWORD_REQUIRED'
             });
         }
 
@@ -142,12 +131,13 @@ export const signup = async (req, res, next) => {
             });
         }
 
-        console.log(`� SIGNUP ATTEMPT: ${maskEmail(email)} (Firebase UID: ${firebaseUid})`);
+        const normalizedEmail = email.toLowerCase().trim();
+        console.log(`📧 REGISTER ATTEMPT: ${maskEmail(normalizedEmail)}`);
 
         // Check if email already exists
-        const existingUser = await User.findOne({ email });
+        const existingUser = await User.findOne({ email: normalizedEmail });
         if (existingUser) {
-            console.log(`❌ SIGNUP BLOCKED: Email already registered: ${maskEmail(email)}`);
+            console.log(`❌ REGISTER BLOCKED: Email already registered: ${maskEmail(normalizedEmail)}`);
             return res.status(409).json({
                 success: false,
                 error: 'Email is already registered. Please login instead.',
@@ -155,29 +145,21 @@ export const signup = async (req, res, next) => {
             });
         }
 
-        // Check if Firebase UID already exists (prevent multiple accounts)
-        const existingFirebaseUser = await User.findOne({ firebaseUid });
-        if (existingFirebaseUser) {
-            console.log(`❌ SIGNUP BLOCKED: Firebase UID already registered: ${firebaseUid}`);
-            return res.status(409).json({
-                success: false,
-                error: 'This account is already registered. Please login instead.',
-                code: 'FIREBASE_UID_ALREADY_REGISTERED'
-            });
-        }
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
         // Create user
         const userData = {
             name: name.trim(),
-            email: email.toLowerCase(),
+            email: normalizedEmail,
             phoneNumber: phoneNumber,
-            firebaseUid: firebaseUid,
+            password: hashedPassword,
             role: ['student', 'partner'].includes(role) ? role : 'student',
             isApproved: role !== 'partner' // Partners need admin approval
         };
 
         const user = await User.create(userData);
-        console.log(`✅ User created: ${maskEmail(email)} (ID: ${user._id}, Role: ${user.role})`);
+        console.log(`✅ User created: ${maskEmail(normalizedEmail)} (ID: ${user._id}, Role: ${user.role})`);
 
         // If partner, create placeholder canteen
         if (role === 'partner') {
@@ -197,7 +179,7 @@ export const signup = async (req, res, next) => {
 
         // Generate JWT tokens for session
         const tokens = await generateTokens(user);
-        console.log(`🔑 Tokens issued for: ${maskEmail(email)}`);
+        console.log(`🔑 Tokens issued for: ${maskEmail(normalizedEmail)}`);
 
         res.status(201).json({
             success: true,
@@ -208,58 +190,67 @@ export const signup = async (req, res, next) => {
             }
         });
     } catch (error) {
-        console.error('❌ SIGNUP ERROR:', error.message);
+        console.error('❌ REGISTER ERROR:', error.message);
         next(error);
     }
 };
 
 /**
- * Login with Email/Password
+ * Login user
  * POST /api/auth/login
  * 
- * FLOW:
- * 1. Receive Firebase ID token (already verified by middleware)
- * 2. Extract email from token
- * 3. Find user by email
- * 4. Issue JWT tokens for session management
- * 
- * Headers: Authorization: Bearer <firebase_id_token>
+ * Body: { email, password }
  */
 export const login = async (req, res, next) => {
     try {
-        const { firebaseUser } = req;
+        const { email, password } = req.body;
 
-        // Extract from verified Firebase token
-        const email = firebaseUser.email;
-        const firebaseUid = firebaseUser.uid;
-
-        // Email is REQUIRED
-        if (!email) {
-            console.error(`❌ LOGIN BLOCKED: No email in Firebase token (uid: ${firebaseUid})`);
+        // Validate required fields
+        if (!email || !email.includes('@')) {
             return res.status(400).json({
                 success: false,
-                error: 'Email is required for login',
+                error: 'Valid email is required',
                 code: 'EMAIL_REQUIRED'
             });
         }
 
-        console.log(`� LOGIN ATTEMPT: ${maskEmail(email)}`);
+        if (!password) {
+            return res.status(400).json({
+                success: false,
+                error: 'Password is required',
+                code: 'PASSWORD_REQUIRED'
+            });
+        }
+
+        const normalizedEmail = email.toLowerCase().trim();
+        console.log(`📧 LOGIN ATTEMPT: ${maskEmail(normalizedEmail)}`);
 
         // Find user by email
-        const user = await User.findOne({ email: email.toLowerCase() });
+        const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
         if (!user) {
-            console.log(`❌ LOGIN BLOCKED: User not found: ${maskEmail(email)}`);
-            return res.status(404).json({
+            console.log(`❌ LOGIN BLOCKED: User not found: ${maskEmail(normalizedEmail)}`);
+            return res.status(401).json({
                 success: false,
-                error: 'No account found with this email. Please signup first.',
-                code: 'USER_NOT_FOUND'
+                error: 'Invalid email or password',
+                code: 'INVALID_CREDENTIALS'
+            });
+        }
+
+        // Check password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            console.log(`❌ LOGIN BLOCKED: Invalid password for: ${maskEmail(normalizedEmail)}`);
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid email or password',
+                code: 'INVALID_CREDENTIALS'
             });
         }
 
         // Check if user is active
         if (!user.isActive) {
-            console.log(`❌ LOGIN BLOCKED: Account deactivated: ${maskEmail(email)}`);
+            console.log(`❌ LOGIN BLOCKED: Account deactivated: ${maskEmail(normalizedEmail)}`);
             return res.status(403).json({
                 success: false,
                 error: 'Account is deactivated. Please contact support.',
@@ -267,16 +258,9 @@ export const login = async (req, res, next) => {
             });
         }
 
-        // Update Firebase UID if changed
-        if (user.firebaseUid !== firebaseUid) {
-            console.warn(`⚠️ Firebase UID mismatch for ${maskEmail(email)}: stored=${user.firebaseUid}, received=${firebaseUid}`);
-            user.firebaseUid = firebaseUid;
-            await user.save();
-        }
-
         // Generate JWT tokens
         const tokens = await generateTokens(user);
-        console.log(`✅ LOGIN SUCCESS: ${maskEmail(email)} (ID: ${user._id})`);
+        console.log(`✅ LOGIN SUCCESS: ${maskEmail(normalizedEmail)} (ID: ${user._id})`);
 
         res.json({
             success: true,
@@ -456,7 +440,11 @@ export const updateProfile = async (req, res, next) => {
     }
 };
 
+// Legacy export for compatibility
+export const signup = register;
+
 export default {
+    register,
     signup,
     login,
     refreshToken,

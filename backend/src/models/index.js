@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 // =====================
-// USER SCHEMA - EMAIL/PASSWORD AUTHENTICATION
+// USER SCHEMA - EMAIL/PASSWORD AUTHENTICATION (NO FIREBASE)
 // =====================
 const userSchema = new mongoose.Schema({
     name: {
@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
         maxlength: [50, 'Name cannot exceed 50 characters']
     },
     // ============================================
-    // EMAIL - PRIMARY IDENTIFIER (from Firebase)
+    // EMAIL - PRIMARY IDENTIFIER
     // ============================================
     email: {
         type: String,
@@ -24,6 +24,15 @@ const userSchema = new mongoose.Schema({
         index: true
     },
     // ============================================
+    // PASSWORD - HASHED WITH BCRYPT
+    // ============================================
+    password: {
+        type: String,
+        required: [true, 'Password is required'],
+        minlength: [6, 'Password must be at least 6 characters'],
+        select: false // Never return password in queries by default
+    },
+    // ============================================
     // PHONE NUMBER - STORED FOR CONTACT, NOT AUTH
     // ============================================
     phoneNumber: {
@@ -31,13 +40,6 @@ const userSchema = new mongoose.Schema({
         required: [true, 'Phone number is required'],
         trim: true,
         match: [/^\+[1-9]\d{6,14}$/, 'Phone number must be in E.164 format (e.g., +919876543210)'],
-        index: true
-    },
-    firebaseUid: {
-        type: String,
-        required: [true, 'Firebase UID is required'],
-        unique: true,
-        trim: true,
         index: true
     },
     role: {
@@ -69,13 +71,13 @@ const userSchema = new mongoose.Schema({
 // Indexes for faster lookups
 userSchema.index({ email: 1 });
 userSchema.index({ phoneNumber: 1 });
-userSchema.index({ firebaseUid: 1 });
 userSchema.index({ role: 1, isActive: 1 });
 
 // Transform output (remove sensitive fields)
 userSchema.methods.toJSON = function () {
     const obj = this.toObject();
     delete obj.__v;
+    delete obj.password; // Never expose password
     return obj;
 };
 

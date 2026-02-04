@@ -1,49 +1,44 @@
 /**
- * Authentication Routes - EMAIL/PASSWORD AUTHENTICATION
+ * Authentication Routes - Classic Email/Password Auth
  * 
- * NO OTP. NO Phone Verification. NO reCAPTCHA.
- * 
- * All authentication is done via Firebase Email/Password.
- * Backend only verifies Firebase ID tokens.
+ * NO Firebase. NO OTP. NO third-party auth.
+ * Simple email + password authentication using bcrypt and JWT.
  */
 
 import { Router } from 'express';
 import authController from '../controllers/auth.controller.js';
 import { authenticate, optionalAuth } from '../middleware/auth.js';
-import { verifyFirebaseToken, requireEmail } from '../middleware/firebaseAuth.middleware.js';
 
 const router = Router();
 
 /**
- * @route   POST /api/auth/signup
- * @desc    Register new user with Email/Password
- * @access  Public (requires Firebase ID token)
- * @header  Authorization: Bearer <firebase_id_token>
- * @body    { name: string, phone: string, role?: 'student' | 'partner' }
+ * @route   POST /api/auth/register
+ * @desc    Register new user with email/password
+ * @access  Public
+ * @body    { name, email, phone, password, role? }
  */
-router.post('/signup',
-    verifyFirebaseToken,
-    requireEmail,
-    authController.signup
-);
+router.post('/register', authController.register);
+
+/**
+ * @route   POST /api/auth/signup
+ * @desc    Alias for register (backward compatibility)
+ * @access  Public
+ */
+router.post('/signup', authController.register);
 
 /**
  * @route   POST /api/auth/login
- * @desc    Login user with Email/Password
- * @access  Public (requires Firebase ID token)
- * @header  Authorization: Bearer <firebase_id_token>
+ * @desc    Login with email/password
+ * @access  Public
+ * @body    { email, password }
  */
-router.post('/login',
-    verifyFirebaseToken,
-    requireEmail,
-    authController.login
-);
+router.post('/login', authController.login);
 
 /**
  * @route   POST /api/auth/refresh
  * @desc    Refresh access token
  * @access  Public
- * @body    { refreshToken: string }
+ * @body    { refreshToken }
  */
 router.post('/refresh', authController.refreshToken);
 
@@ -51,7 +46,7 @@ router.post('/refresh', authController.refreshToken);
  * @route   POST /api/auth/logout
  * @desc    Logout user
  * @access  Private (optional)
- * @body    { refreshToken?: string, logoutAll?: boolean }
+ * @body    { refreshToken?, logoutAll? }
  */
 router.post('/logout', optionalAuth, authController.logout);
 
@@ -66,7 +61,7 @@ router.get('/me', authenticate, authController.getMe);
  * @route   PUT /api/auth/profile
  * @desc    Update user profile
  * @access  Private
- * @body    { name?: string }
+ * @body    { name? }
  */
 router.put('/profile', authenticate, authController.updateProfile);
 
