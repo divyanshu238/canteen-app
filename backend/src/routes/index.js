@@ -1,7 +1,8 @@
 /**
- * Routes Index - FIREBASE PHONE OTP AUTHENTICATION
+ * Routes Index - EMAIL/PASSWORD AUTHENTICATION
  * 
- * OTP routes have been REMOVED - Firebase handles all OTP logic.
+ * All authentication is handled via Firebase Email/Password.
+ * NO OTP routes. NO phone verification routes.
  */
 
 import authRoutes from './auth.routes.js';
@@ -18,7 +19,6 @@ export const setupRoutes = (app) => {
     app.use('/api/partner', partnerRoutes);
     app.use('/api/admin', adminRoutes);
     app.use('/api/search', searchRoutes);
-    // NOTE: /api/otp routes REMOVED - Firebase handles OTP
 
     // Note: /api/health is defined in index.js BEFORE rate limiting middleware
     // to ensure it always responds with 200 for Render health checks

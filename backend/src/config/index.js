@@ -1,7 +1,7 @@
 /**
  * Production-ready configuration
  * 
- * FIREBASE PHONE OTP AUTHENTICATION SYSTEM
+ * EMAIL/PASSWORD AUTHENTICATION SYSTEM
  * 
  * NOTE: dotenv.config() is called in index.js BEFORE this module is imported.
  * Do NOT call dotenv.config() here - environment variables are already loaded.
@@ -20,7 +20,7 @@ if (isProduction) {
         'RAZORPAY_KEY_SECRET',
         'RAZORPAY_WEBHOOK_SECRET',
         'FRONTEND_URL',
-        // Firebase configuration (MANDATORY)
+        // Firebase configuration (MANDATORY for email/password auth)
         'FIREBASE_PROJECT_ID',
         'FIREBASE_CLIENT_EMAIL',
         'FIREBASE_PRIVATE_KEY'
@@ -48,7 +48,7 @@ if (isProduction && process.env.FIREBASE_PRIVATE_KEY) {
 }
 
 // ============================================
-// REJECT DEPRECATED EMAIL/PHONE OTP CONFIG
+// REJECT DEPRECATED CONFIG (OTP NO LONGER USED)
 // ============================================
 const deprecatedVars = [
     'REQUIRE_EMAIL_VERIFICATION',
@@ -61,7 +61,7 @@ const deprecatedVars = [
 
 deprecatedVars.forEach(varName => {
     if (process.env[varName]) {
-        console.warn(`⚠️  DEPRECATED: ${varName} is no longer used. Firebase handles all OTP logic.`);
+        console.warn(`⚠️  DEPRECATED: ${varName} is no longer used. Using email/password authentication.`);
     }
 });
 

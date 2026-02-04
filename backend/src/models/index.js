@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 // =====================
-// USER SCHEMA - PHONE-BASED AUTHENTICATION
+// USER SCHEMA - EMAIL/PASSWORD AUTHENTICATION
 // =====================
 const userSchema = new mongoose.Schema({
     name: {
@@ -12,13 +12,23 @@ const userSchema = new mongoose.Schema({
         maxlength: [50, 'Name cannot exceed 50 characters']
     },
     // ============================================
-    // PHONE NUMBER - PRIMARY IDENTIFIER
-    // Firebase handles OTP verification
+    // EMAIL - PRIMARY IDENTIFIER (from Firebase)
+    // ============================================
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        trim: true,
+        lowercase: true,
+        match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address'],
+        index: true
+    },
+    // ============================================
+    // PHONE NUMBER - STORED FOR CONTACT, NOT AUTH
     // ============================================
     phoneNumber: {
         type: String,
         required: [true, 'Phone number is required'],
-        unique: true,
         trim: true,
         match: [/^\+[1-9]\d{6,14}$/, 'Phone number must be in E.164 format (e.g., +919876543210)'],
         index: true
@@ -29,10 +39,6 @@ const userSchema = new mongoose.Schema({
         unique: true,
         trim: true,
         index: true
-    },
-    isPhoneVerified: {
-        type: Boolean,
-        default: true // Always true since Firebase verifies before we get the token
     },
     role: {
         type: String,
@@ -61,6 +67,7 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes for faster lookups
+userSchema.index({ email: 1 });
 userSchema.index({ phoneNumber: 1 });
 userSchema.index({ firebaseUid: 1 });
 userSchema.index({ role: 1, isActive: 1 });
@@ -366,11 +373,6 @@ refreshTokenSchema.index({ userId: 1 });
 refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
-
-// =====================
-// NOTE: OTP SCHEMA REMOVED
-// Firebase handles all OTP logic
-// =====================
 
 export default {
     User,

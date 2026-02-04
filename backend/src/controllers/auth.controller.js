@@ -1,19 +1,16 @@
 /**
- * Authentication Controller - FIREBASE PHONE OTP ONLY
+ * Authentication Controller - EMAIL/PASSWORD AUTHENTICATION
  * 
- * SECURITY-CRITICAL: Phone number is the ONLY authentication identifier
+ * NO OTP. NO Phone Verification. NO reCAPTCHA.
  * 
  * ARCHITECTURE:
- * 1. Backend NEVER generates or sends OTPs
- * 2. Firebase handles all OTP delivery and verification
- * 3. Backend ONLY verifies Firebase ID tokens
- * 4. Phone number is MANDATORY and UNIQUE
+ * 1. Frontend authenticates with Firebase using email/password
+ * 2. Backend receives Firebase ID token
+ * 3. Backend verifies token and extracts email
+ * 4. Backend creates/finds user by email
+ * 5. Backend issues JWT for session management
  * 
- * FLOWS:
- * - Signup: Firebase token → Extract phone → Create user if phone unique → Issue JWT
- * - Login: Firebase token → Extract phone → Find user → Issue JWT
- * 
- * ZERO email logic. ZERO SMS in backend. ZERO OTP generation.
+ * Phone number is stored for contact purposes only, NOT for authentication.
  */
 
 import jwt from 'jsonwebtoken';
@@ -28,7 +25,7 @@ export const generateTokens = async (user) => {
         {
             id: user._id,
             role: user.role,
-            phoneNumber: user.phoneNumber,
+            email: user.email,
             canteenId: user.canteenId
         },
         config.jwtSecret,
@@ -60,44 +57,46 @@ export const generateTokens = async (user) => {
 export const formatUserResponse = (user) => ({
     id: user._id.toString(),
     name: user.name,
+    email: user.email,
     phoneNumber: user.phoneNumber,
     firebaseUid: user.firebaseUid,
     role: user.role,
     canteenId: user.canteenId?.toString(),
     isApproved: user.isApproved,
-    isPhoneVerified: user.isPhoneVerified,
     createdAt: user.createdAt
 });
 
 /**
- * Mask phone number for logging (e.g., +91****1234)
+ * Mask email for logging (e.g., j***@example.com)
  */
-const maskPhone = (phone) => {
-    if (!phone || phone.length < 6) return '***';
-    return phone.slice(0, 3) + '****' + phone.slice(-4);
+const maskEmail = (email) => {
+    if (!email || !email.includes('@')) return '***';
+    const [local, domain] = email.split('@');
+    const maskedLocal = local.length > 2 ? local[0] + '***' : local;
+    return `${maskedLocal}@${domain}`;
 };
 
 /**
- * Signup with Firebase Phone OTP
+ * Signup with Email/Password
  * POST /api/auth/signup
  * 
  * FLOW:
  * 1. Receive Firebase ID token (already verified by middleware)
- * 2. Extract phone_number and uid from token
- * 3. Check if phone number already exists
- * 4. Create new user with phone as unique identifier
+ * 2. Extract email and uid from token
+ * 3. Check if email already exists
+ * 4. Create new user with email as unique identifier
  * 5. Issue JWT tokens for session management
  * 
  * Headers: Authorization: Bearer <firebase_id_token>
- * Body: { name: string, role?: 'student' | 'partner' }
+ * Body: { name: string, phone: string, role?: 'student' | 'partner' }
  */
 export const signup = async (req, res, next) => {
     try {
-        const { name, role = 'student' } = req.body;
+        const { name, phone, role = 'student' } = req.body;
         const { firebaseUser } = req;
 
         // Extract from verified Firebase token
-        const phoneNumber = firebaseUser.phone_number;
+        const email = firebaseUser.email;
         const firebaseUid = firebaseUser.uid;
 
         // Validate required fields
@@ -109,26 +108,50 @@ export const signup = async (req, res, next) => {
             });
         }
 
-        // Phone number is REQUIRED (validated by middleware, but double-check)
-        if (!phoneNumber) {
-            console.error(`❌ SIGNUP BLOCKED: No phone number in Firebase token (uid: ${firebaseUid})`);
+        // Email is REQUIRED
+        if (!email) {
+            console.error(`❌ SIGNUP BLOCKED: No email in Firebase token (uid: ${firebaseUid})`);
             return res.status(400).json({
                 success: false,
-                error: 'Phone number is required for signup',
+                error: 'Email is required for signup',
+                code: 'EMAIL_REQUIRED'
+            });
+        }
+
+        // Phone number is REQUIRED
+        if (!phone) {
+            return res.status(400).json({
+                success: false,
+                error: 'Phone number is required',
                 code: 'PHONE_REQUIRED'
             });
         }
 
-        console.log(`📱 SIGNUP ATTEMPT: ${maskPhone(phoneNumber)} (Firebase UID: ${firebaseUid})`);
+        // Format phone number
+        const cleanPhone = phone.replace(/\D/g, '');
+        const phoneNumber = cleanPhone.length === 10 ? `+91${cleanPhone}` :
+            cleanPhone.startsWith('91') && cleanPhone.length === 12 ? `+${cleanPhone}` :
+                `+${cleanPhone}`;
 
-        // Check if phone number already exists
-        const existingUser = await User.findOne({ phoneNumber });
+        // Validate phone number format
+        if (!/^\+[1-9]\d{6,14}$/.test(phoneNumber)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid phone number format',
+                code: 'INVALID_PHONE_FORMAT'
+            });
+        }
+
+        console.log(`� SIGNUP ATTEMPT: ${maskEmail(email)} (Firebase UID: ${firebaseUid})`);
+
+        // Check if email already exists
+        const existingUser = await User.findOne({ email });
         if (existingUser) {
-            console.log(`❌ SIGNUP BLOCKED: Phone already registered: ${maskPhone(phoneNumber)}`);
+            console.log(`❌ SIGNUP BLOCKED: Email already registered: ${maskEmail(email)}`);
             return res.status(409).json({
                 success: false,
-                error: 'Phone number is already registered. Please login instead.',
-                code: 'PHONE_ALREADY_REGISTERED'
+                error: 'Email is already registered. Please login instead.',
+                code: 'EMAIL_ALREADY_REGISTERED'
             });
         }
 
@@ -146,15 +169,15 @@ export const signup = async (req, res, next) => {
         // Create user
         const userData = {
             name: name.trim(),
+            email: email.toLowerCase(),
             phoneNumber: phoneNumber,
             firebaseUid: firebaseUid,
             role: ['student', 'partner'].includes(role) ? role : 'student',
-            isApproved: role !== 'partner', // Partners need admin approval
-            isPhoneVerified: true // Already verified by Firebase
+            isApproved: role !== 'partner' // Partners need admin approval
         };
 
         const user = await User.create(userData);
-        console.log(`✅ User created: ${maskPhone(phoneNumber)} (ID: ${user._id}, Role: ${user.role})`);
+        console.log(`✅ User created: ${maskEmail(email)} (ID: ${user._id}, Role: ${user.role})`);
 
         // If partner, create placeholder canteen
         if (role === 'partner') {
@@ -174,7 +197,7 @@ export const signup = async (req, res, next) => {
 
         // Generate JWT tokens for session
         const tokens = await generateTokens(user);
-        console.log(`🔑 Tokens issued for: ${maskPhone(phoneNumber)}`);
+        console.log(`🔑 Tokens issued for: ${maskEmail(email)}`);
 
         res.status(201).json({
             success: true,
@@ -191,13 +214,13 @@ export const signup = async (req, res, next) => {
 };
 
 /**
- * Login with Firebase Phone OTP
+ * Login with Email/Password
  * POST /api/auth/login
  * 
  * FLOW:
  * 1. Receive Firebase ID token (already verified by middleware)
- * 2. Extract phone_number from token
- * 3. Find user by phone number
+ * 2. Extract email from token
+ * 3. Find user by email
  * 4. Issue JWT tokens for session management
  * 
  * Headers: Authorization: Bearer <firebase_id_token>
@@ -207,36 +230,36 @@ export const login = async (req, res, next) => {
         const { firebaseUser } = req;
 
         // Extract from verified Firebase token
-        const phoneNumber = firebaseUser.phone_number;
+        const email = firebaseUser.email;
         const firebaseUid = firebaseUser.uid;
 
-        // Phone number is REQUIRED
-        if (!phoneNumber) {
-            console.error(`❌ LOGIN BLOCKED: No phone number in Firebase token (uid: ${firebaseUid})`);
+        // Email is REQUIRED
+        if (!email) {
+            console.error(`❌ LOGIN BLOCKED: No email in Firebase token (uid: ${firebaseUid})`);
             return res.status(400).json({
                 success: false,
-                error: 'Phone number is required for login',
-                code: 'PHONE_REQUIRED'
+                error: 'Email is required for login',
+                code: 'EMAIL_REQUIRED'
             });
         }
 
-        console.log(`📱 LOGIN ATTEMPT: ${maskPhone(phoneNumber)}`);
+        console.log(`� LOGIN ATTEMPT: ${maskEmail(email)}`);
 
-        // Find user by phone number
-        const user = await User.findOne({ phoneNumber });
+        // Find user by email
+        const user = await User.findOne({ email: email.toLowerCase() });
 
         if (!user) {
-            console.log(`❌ LOGIN BLOCKED: User not found: ${maskPhone(phoneNumber)}`);
+            console.log(`❌ LOGIN BLOCKED: User not found: ${maskEmail(email)}`);
             return res.status(404).json({
                 success: false,
-                error: 'No account found with this phone number. Please signup first.',
+                error: 'No account found with this email. Please signup first.',
                 code: 'USER_NOT_FOUND'
             });
         }
 
         // Check if user is active
         if (!user.isActive) {
-            console.log(`❌ LOGIN BLOCKED: Account deactivated: ${maskPhone(phoneNumber)}`);
+            console.log(`❌ LOGIN BLOCKED: Account deactivated: ${maskEmail(email)}`);
             return res.status(403).json({
                 success: false,
                 error: 'Account is deactivated. Please contact support.',
@@ -244,18 +267,16 @@ export const login = async (req, res, next) => {
             });
         }
 
-        // Update Firebase UID if changed (optional: for security, you might want to reject this)
+        // Update Firebase UID if changed
         if (user.firebaseUid !== firebaseUid) {
-            console.warn(`⚠️ Firebase UID mismatch for ${maskPhone(phoneNumber)}: stored=${user.firebaseUid}, received=${firebaseUid}`);
-            // For strict security, you could reject this login
-            // For now, we update it (user may have re-registered on Firebase)
+            console.warn(`⚠️ Firebase UID mismatch for ${maskEmail(email)}: stored=${user.firebaseUid}, received=${firebaseUid}`);
             user.firebaseUid = firebaseUid;
             await user.save();
         }
 
         // Generate JWT tokens
         const tokens = await generateTokens(user);
-        console.log(`✅ LOGIN SUCCESS: ${maskPhone(phoneNumber)} (ID: ${user._id})`);
+        console.log(`✅ LOGIN SUCCESS: ${maskEmail(email)} (ID: ${user._id})`);
 
         res.json({
             success: true,

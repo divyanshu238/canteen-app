@@ -1,39 +1,41 @@
 /**
- * Authentication Routes - FIREBASE PHONE OTP ONLY
+ * Authentication Routes - EMAIL/PASSWORD AUTHENTICATION
  * 
- * All phone OTP verification is handled by Firebase.
+ * NO OTP. NO Phone Verification. NO reCAPTCHA.
+ * 
+ * All authentication is done via Firebase Email/Password.
  * Backend only verifies Firebase ID tokens.
  */
 
 import { Router } from 'express';
 import authController from '../controllers/auth.controller.js';
 import { authenticate, optionalAuth } from '../middleware/auth.js';
-import { verifyFirebaseToken, requirePhoneNumber } from '../middleware/firebaseAuth.middleware.js';
+import { verifyFirebaseToken, requireEmail } from '../middleware/firebaseAuth.middleware.js';
 
 const router = Router();
 
 /**
  * @route   POST /api/auth/signup
- * @desc    Register new user with Firebase Phone OTP
+ * @desc    Register new user with Email/Password
  * @access  Public (requires Firebase ID token)
  * @header  Authorization: Bearer <firebase_id_token>
- * @body    { name: string, role?: 'student' | 'partner' }
+ * @body    { name: string, phone: string, role?: 'student' | 'partner' }
  */
 router.post('/signup',
     verifyFirebaseToken,
-    requirePhoneNumber,
+    requireEmail,
     authController.signup
 );
 
 /**
  * @route   POST /api/auth/login
- * @desc    Login user with Firebase Phone OTP
+ * @desc    Login user with Email/Password
  * @access  Public (requires Firebase ID token)
  * @header  Authorization: Bearer <firebase_id_token>
  */
 router.post('/login',
     verifyFirebaseToken,
-    requirePhoneNumber,
+    requireEmail,
     authController.login
 );
 

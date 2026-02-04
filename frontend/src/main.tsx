@@ -12,7 +12,6 @@ import { SearchResultsPage } from './pages/SearchResultsPage';
 import { Cart } from './pages/Cart';
 import { OrderTracking } from './pages/OrderTracking';
 import { Login } from './pages/Login';
-import { PhoneVerification } from './pages/OTPVerification';
 import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import './index.css';
@@ -41,8 +40,6 @@ if (!rootElement) throw new Error('Failed to find the root element');
 
 ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
-        {/* Global reCAPTCHA container - SINGLETON LIFECYCLE */}
-        <div id="recaptcha-container"></div>
         <Provider store={store}>
             <SocketProvider>
                 <BrowserRouter>
@@ -55,11 +52,9 @@ ReactDOM.createRoot(rootElement).render(
                         <Route path="/cart" element={<Cart />} />
                         <Route path="/login" element={<Login />} />
 
-                        {/* Phone OTP Verification */}
-                        <Route path="/verify-phone" element={<PhoneVerification />} />
-
-                        {/* Legacy routes - redirect to phone verification */}
-                        <Route path="/verify-email" element={<Navigate to="/verify-phone" replace />} />
+                        {/* Legacy routes - redirect to login (OTP no longer used) */}
+                        <Route path="/verify-phone" element={<Navigate to="/login" replace />} />
+                        <Route path="/verify-email" element={<Navigate to="/login" replace />} />
 
                         {/* Protected Routes */}
                         <Route path="/order/:id" element={

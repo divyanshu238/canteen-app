@@ -1,7 +1,7 @@
 /**
- * Firebase Authentication Middleware
+ * Firebase Authentication Middleware - EMAIL/PASSWORD
  * 
- * SECURITY-CRITICAL: Verifies Firebase ID tokens for protected routes
+ * NO OTP. NO Phone Verification. NO reCAPTCHA.
  * 
  * This middleware:
  * 1. Extracts Bearer token from Authorization header
@@ -19,7 +19,7 @@ import { verifyIdToken, isFirebaseReady } from '../config/firebase.js';
  * Expects: Authorization: Bearer <firebase_id_token>
  * 
  * On success:
- * - req.firebaseUser = decoded token (contains uid, phone_number, etc.)
+ * - req.firebaseUser = decoded token (contains uid, email, etc.)
  * 
  * On failure:
  * - 401 Unauthorized with error message
@@ -79,17 +79,21 @@ export const verifyFirebaseToken = async (req, res, next) => {
     req.firebaseUser = result.decodedToken;
 
     // Log authentication (without sensitive data)
-    console.log(`🔐 Firebase auth: uid=${result.decodedToken.uid}, phone=${result.decodedToken.phone_number || 'N/A'}`);
+    const email = result.decodedToken.email || 'N/A';
+    const maskedEmail = email !== 'N/A' && email.includes('@')
+        ? email[0] + '***@' + email.split('@')[1]
+        : email;
+    console.log(`🔐 Firebase auth: uid=${result.decodedToken.uid}, email=${maskedEmail}`);
 
     next();
 };
 
 /**
- * Extract phone number from Firebase token
+ * Require email in Firebase token
  * 
- * Utility middleware to require phone number in token
+ * Use after verifyFirebaseToken to ensure email is present
  */
-export const requirePhoneNumber = (req, res, next) => {
+export const requireEmail = (req, res, next) => {
     if (!req.firebaseUser) {
         return res.status(401).json({
             success: false,
@@ -98,30 +102,38 @@ export const requirePhoneNumber = (req, res, next) => {
         });
     }
 
-    const phoneNumber = req.firebaseUser.phone_number;
+    const email = req.firebaseUser.email;
 
-    if (!phoneNumber) {
-        console.error(`❌ Firebase token missing phone_number: uid=${req.firebaseUser.uid}`);
+    if (!email) {
+        console.error(`❌ Firebase token missing email: uid=${req.firebaseUser.uid}`);
         return res.status(400).json({
             success: false,
-            error: 'Phone number is required for authentication',
-            code: 'PHONE_NUMBER_REQUIRED'
+            error: 'Email is required for authentication',
+            code: 'EMAIL_REQUIRED'
         });
     }
 
-    // Validate phone number format (E.164)
-    if (!phoneNumber.startsWith('+') || phoneNumber.length < 10) {
+    // Basic email format validation
+    if (!email.includes('@')) {
         return res.status(400).json({
             success: false,
-            error: 'Invalid phone number format',
-            code: 'INVALID_PHONE_FORMAT'
+            error: 'Invalid email format',
+            code: 'INVALID_EMAIL_FORMAT'
         });
     }
 
     next();
 };
 
+// Legacy export for compatibility (no longer checks phone)
+export const requirePhoneNumber = (req, res, next) => {
+    // Phone number is no longer required for authentication
+    // This function exists for backward compatibility
+    next();
+};
+
 export default {
     verifyFirebaseToken,
+    requireEmail,
     requirePhoneNumber
 };
