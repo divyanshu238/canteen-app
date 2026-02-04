@@ -87,13 +87,7 @@ async function bootstrapApplication() {
         // --- Trust proxy (Render uses reverse proxy) ---
         app.set('trust proxy', 1);
 
-        // --- Rate limiting (skip health routes) ---
-        const limiter = rateLimit({
-            windowMs: 15 * 60 * 1000,
-            max: 100,
-            skip: (req) => ['/', '/health', '/api/health'].includes(req.path)
-        });
-        app.use('/api/', limiter);
+
 
         // --- CORS ---
         // --- CORS ---
@@ -121,8 +115,20 @@ async function bootstrapApplication() {
             },
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-            allowedHeaders: ['Content-Type', 'Authorization']
+            allowedHeaders: ['Content-Type', 'Authorization'],
+            optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
         }));
+
+        // --- Rate limiting (skip health and OPTIONS) ---
+        const limiter = rateLimit({
+            windowMs: 15 * 60 * 1000,
+            max: 100,
+            skip: (req) => {
+                if (req.method === 'OPTIONS') return true;
+                return ['/', '/health', '/api/health'].includes(req.path);
+            }
+        });
+        app.use('/api/', limiter);
 
         // --- Body parsers ---
         app.use(express.json({ limit: '10mb' }));
