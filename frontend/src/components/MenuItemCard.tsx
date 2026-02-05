@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Minus, RotateCcw } from 'lucide-react';
 import { fadeInUp, bounce } from '../utils/motion';
-import { MenuItem } from '../store';
+import type { MenuItem } from '../store';
 
 interface MenuItemData extends MenuItem {
     category: string;
