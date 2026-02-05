@@ -222,20 +222,112 @@ const uiSlice = createSlice({
     }
 });
 
+// -- ORDER HISTORY SLICE --
+// Tracks previously ordered items to show "Previously ordered" badges
+interface OrderHistoryItem {
+    orderCount: number;
+    lastOrderedAt: string;
+    itemName?: string;
+}
+
+interface OrderHistoryState {
+    // Map of itemId -> order history data
+    orderedItems: Record<string, OrderHistoryItem>;
+    // List of top favorite item IDs
+    favoriteItems: string[];
+    // Total number of orders placed by user
+    totalOrders: number;
+    // Loading and fetch state
+    isLoading: boolean;
+    lastFetched: number | null;
+    error: string | null;
+}
+
+const getStoredOrderHistory = (): OrderHistoryState => {
+    try {
+        const stored = JSON.parse(localStorage.getItem('orderHistory') || 'null');
+        if (stored && Date.now() - stored.lastFetched < 5 * 60 * 1000) {
+            // Use cached data if less than 5 minutes old
+            return stored;
+        }
+    } catch {
+        // Ignore parse errors
+    }
+    return {
+        orderedItems: {},
+        favoriteItems: [],
+        totalOrders: 0,
+        isLoading: false,
+        lastFetched: null,
+        error: null
+    };
+};
+
+const initialOrderHistory: OrderHistoryState = getStoredOrderHistory();
+
+const orderHistorySlice = createSlice({
+    name: 'orderHistory',
+    initialState: initialOrderHistory,
+    reducers: {
+        setOrderHistoryLoading: (state, action: PayloadAction<boolean>) => {
+            state.isLoading = action.payload;
+        },
+        setOrderHistory: (state, action: PayloadAction<{
+            orderedItems: Record<string, OrderHistoryItem>;
+            favoriteItems: string[];
+            totalOrders: number;
+        }>) => {
+            state.orderedItems = action.payload.orderedItems;
+            state.favoriteItems = action.payload.favoriteItems;
+            state.totalOrders = action.payload.totalOrders;
+            state.lastFetched = Date.now();
+            state.isLoading = false;
+            state.error = null;
+            // Cache to localStorage
+            localStorage.setItem('orderHistory', JSON.stringify(state));
+        },
+        setOrderHistoryError: (state, action: PayloadAction<string>) => {
+            state.error = action.payload;
+            state.isLoading = false;
+        },
+        clearOrderHistory: (state) => {
+            state.orderedItems = {};
+            state.favoriteItems = [];
+            state.totalOrders = 0;
+            state.lastFetched = null;
+            state.error = null;
+            localStorage.removeItem('orderHistory');
+        },
+        // Call this after a successful order to invalidate cache
+        invalidateOrderHistory: (state) => {
+            state.lastFetched = null;
+        }
+    }
+});
+
 // Export actions
 export const { login, logout, updateUser, updateTokens } = authSlice.actions;
 export const { addToCart, removeFromCart, updateQuantity, clearCart } = cartSlice.actions;
 export const { setLoading, showNotification, hideNotification } = uiSlice.actions;
+export const {
+    setOrderHistoryLoading,
+    setOrderHistory,
+    setOrderHistoryError,
+    clearOrderHistory,
+    invalidateOrderHistory
+} = orderHistorySlice.actions;
 
 // Configure store
 export const store = configureStore({
     reducer: {
         auth: authSlice.reducer,
         cart: cartSlice.reducer,
-        ui: uiSlice.reducer
+        ui: uiSlice.reducer,
+        orderHistory: orderHistorySlice.reducer
     }
 });
 
 // Export hooks/types
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
+

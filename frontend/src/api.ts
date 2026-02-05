@@ -148,6 +148,13 @@ export const orderAPI = {
 
     cancel: (id: string, reason?: string) =>
         api.post(`/orders/${id}/cancel`, { reason }),
+
+    /**
+     * Get lightweight order history summary for "Previously ordered" badges
+     * Returns: { orderedItems: {[itemId]: {orderCount, lastOrderedAt}}, favoriteItems: [...] }
+     */
+    getHistorySummary: () =>
+        api.get('/orders/history-summary'),
 };
 
 // Partner API

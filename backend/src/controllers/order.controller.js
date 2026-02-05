@@ -498,6 +498,104 @@ export const cancelOrder = async (req, res, next) => {
     }
 };
 
+/**
+ * Get lightweight order history summary for the current user
+ * Used to show "Previously ordered" badges on menu items
+ * GET /api/orders/history-summary
+ * 
+ * Response Format:
+ * {
+ *   success: true,
+ *   data: {
+ *     orderedItems: [
+ *       { itemId: "abc123", orderCount: 5, lastOrderedAt: "2026-02-01T..." },
+ *       ...
+ *     ],
+ *     totalOrders: 15,
+ *     favoriteItems: ["itemId1", "itemId2", "itemId3"]
+ *   }
+ * }
+ */
+export const getOrderHistorySummary = async (req, res, next) => {
+    try {
+        const userId = req.user._id;
+
+        // Aggregate order history to get item-level summary
+        const itemSummary = await Order.aggregate([
+            // Only completed/paid orders for this user
+            {
+                $match: {
+                    userId: userId,
+                    paymentStatus: 'paid',
+                    status: { $nin: ['cancelled'] }
+                }
+            },
+            // Unwind items array to process each item
+            { $unwind: '$items' },
+            // Group by itemId to get counts
+            {
+                $group: {
+                    _id: '$items.itemId',
+                    itemName: { $first: '$items.name' },
+                    orderCount: { $sum: '$items.qty' },
+                    lastOrderedAt: { $max: '$createdAt' },
+                    totalSpent: { $sum: { $multiply: ['$items.price', '$items.qty'] } }
+                }
+            },
+            // Sort by order count (most ordered first)
+            { $sort: { orderCount: -1 } },
+            // Limit to top 100 items for performance
+            { $limit: 100 },
+            // Project final shape
+            {
+                $project: {
+                    _id: 0,
+                    itemId: '$_id',
+                    itemName: 1,
+                    orderCount: 1,
+                    lastOrderedAt: 1,
+                    totalSpent: 1
+                }
+            }
+        ]);
+
+        // Get total order count
+        const totalOrders = await Order.countDocuments({
+            userId: userId,
+            paymentStatus: 'paid',
+            status: { $nin: ['cancelled'] }
+        });
+
+        // Get top 5 favorite items (most ordered)
+        const favoriteItems = itemSummary.slice(0, 5).map(item => item.itemId?.toString()).filter(Boolean);
+
+        // Create a quick lookup map for the frontend (itemId -> summary)
+        const orderedItemsMap = {};
+        itemSummary.forEach(item => {
+            if (item.itemId) {
+                orderedItemsMap[item.itemId.toString()] = {
+                    orderCount: item.orderCount,
+                    lastOrderedAt: item.lastOrderedAt,
+                    itemName: item.itemName
+                };
+            }
+        });
+
+        res.json({
+            success: true,
+            data: {
+                orderedItems: orderedItemsMap,
+                orderedItemsList: itemSummary,
+                totalOrders,
+                favoriteItems
+            }
+        });
+    } catch (error) {
+        console.error('[getOrderHistorySummary] Error:', error);
+        next(error);
+    }
+};
+
 export default {
     createOrder,
     verifyPayment,
@@ -505,5 +603,6 @@ export default {
     handleWebhook,
     getOrder,
     getMyOrders,
-    cancelOrder
+    cancelOrder,
+    getOrderHistorySummary
 };

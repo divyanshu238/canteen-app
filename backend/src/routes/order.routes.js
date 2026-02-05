@@ -43,6 +43,13 @@ router.post('/webhook', orderController.handleWebhook);
 router.get('/', authenticate, orderController.getMyOrders);
 
 /**
+ * @route   GET /api/orders/history-summary
+ * @desc    Get lightweight order history summary for "Previously ordered" badges
+ * @access  Private
+ */
+router.get('/history-summary', authenticate, orderController.getOrderHistorySummary);
+
+/**
  * @route   GET /api/orders/:id
  * @desc    Get order details
  * @access  Private

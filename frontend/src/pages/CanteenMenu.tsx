@@ -5,7 +5,8 @@ import { addToCart, removeFromCart } from '../store';
 import type { RootState, MenuItem } from '../store';
 import { canteenAPI } from '../api';
 import { Navbar } from '../components/Navbar';
-import { Star, Clock, Search, Plus, Minus } from 'lucide-react';
+import { Star, Clock, Search, Plus, Minus, RotateCcw } from 'lucide-react';
+import { useOrderHistory } from '../hooks/useOrderHistory';
 
 interface Canteen {
     _id: string;
@@ -33,6 +34,9 @@ export const CanteenMenu = () => {
 
     const dispatch = useDispatch();
     const cartItems = useSelector((state: RootState) => state.cart.items);
+
+    // Order history for "Previously ordered" badges
+    const { orderedItems } = useOrderHistory();
 
     useEffect(() => {
         if (id) {
@@ -161,8 +165,8 @@ export const CanteenMenu = () => {
                                             key={cat}
                                             onClick={() => setActiveCategory(cat)}
                                             className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat
-                                                    ? 'bg-orange-100 text-orange-600'
-                                                    : 'text-gray-600 hover:bg-gray-50'
+                                                ? 'bg-orange-100 text-orange-600'
+                                                : 'text-gray-600 hover:bg-gray-50'
                                                 }`}
                                         >
                                             {cat} ({menuByCategory[cat]?.length || 0})
@@ -184,6 +188,9 @@ export const CanteenMenu = () => {
                         <div className="grid gap-4">
                             {filteredMenu.map(item => {
                                 const qty = getItemQty(item._id);
+                                const itemHistory = orderedItems[item._id];
+                                const wasPreviouslyOrdered = !!itemHistory;
+                                const orderCount = itemHistory?.orderCount || 0;
 
                                 return (
                                     <div
@@ -210,7 +217,18 @@ export const CanteenMenu = () => {
                                                     <div className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'
                                                         }`}></div>
                                                 </div>
-                                                <h3 className="font-bold text-gray-900">{item.name}</h3>
+                                                <div className="flex-1">
+                                                    <h3 className="font-bold text-gray-900">{item.name}</h3>
+                                                    {/* Previously Ordered Badge */}
+                                                    {wasPreviouslyOrdered && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <RotateCcw size={11} className="text-amber-600" />
+                                                            <span className="text-xs font-semibold text-amber-700">
+                                                                {orderCount > 1 ? `Ordered ${orderCount}x` : 'Previously ordered'}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {item.description && (

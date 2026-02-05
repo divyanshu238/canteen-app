@@ -1,19 +1,36 @@
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCart, removeFromCart } from '../store';
 import type { RootState, MenuItem } from '../store';
-import { Plus, Minus } from 'lucide-react';
+import { Plus, Minus, RotateCcw } from 'lucide-react';
 
 export const FoodItemCard = ({ item }: { item: MenuItem }) => {
     const dispatch = useDispatch();
     const cartItem = useSelector((state: RootState) => state.cart.items.find((i) => i._id === item._id));
     const qty = cartItem ? cartItem.qty : 0;
 
+    // Check if this item was previously ordered
+    const orderHistory = useSelector((state: RootState) => state.orderHistory.orderedItems[item._id]);
+    const wasPreviouslyOrdered = !!orderHistory;
+    const orderCount = orderHistory?.orderCount || 0;
+
     return (
         <div className="flex justify-between items-start gap-6 py-6 border-b border-gray-100 last:border-0 hover:bg-orange-50/30 transition-colors px-4 rounded-2xl group">
             <div className="flex-1 min-w-0">
-                {/* Veg/Non-Veg Indicator */}
-                <div className={`w-5 h-5 border-2 flex items-center justify-center p-0.5 mb-3 rounded ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
-                    <div className={`w-full h-full rounded-sm ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                {/* Veg/Non-Veg Indicator + Previously Ordered Badge */}
+                <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-5 h-5 border-2 flex items-center justify-center p-0.5 rounded ${item.isVeg ? 'border-green-600' : 'border-red-600'}`}>
+                        <div className={`w-full h-full rounded-sm ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                    </div>
+
+                    {/* Previously Ordered Badge */}
+                    {wasPreviouslyOrdered && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full">
+                            <RotateCcw size={12} className="text-amber-600" />
+                            <span className="text-xs font-semibold text-amber-700">
+                                {orderCount > 1 ? `Ordered ${orderCount}x` : 'Previously ordered'}
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <h3 className="font-bold text-gray-900 text-lg mb-1 group-hover:text-orange-600 transition-colors">
@@ -86,3 +103,4 @@ export const FoodItemCard = ({ item }: { item: MenuItem }) => {
         </div>
     );
 };
+

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { canteenAPI } from '../api';
 import { Navbar } from '../components/Navbar';
 import { Star, Clock, Sparkles } from 'lucide-react';
+import { useOrderHistory } from '../hooks/useOrderHistory';
 
 interface Canteen {
     _id: string;
@@ -19,6 +20,9 @@ export const Home = () => {
     const [canteens, setCanteens] = useState<Canteen[]>([]);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+
+    // Initialize order history for "Previously ordered" badges
+    useOrderHistory();
 
     useEffect(() => {
         setLoading(true);
