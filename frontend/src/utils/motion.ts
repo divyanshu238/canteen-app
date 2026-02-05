@@ -1,8 +1,18 @@
 // Page Transitions
 export const pageVariants = {
-    initial: { opacity: 0, y: 10 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
-    exit: { opacity: 0, y: -10, transition: { duration: 0.3 } }
+    initial: { opacity: 0, scale: 0.98, filter: 'blur(4px)' },
+    animate: {
+        opacity: 1,
+        scale: 1,
+        filter: 'blur(0px)',
+        transition: { duration: 0.4, ease: [0.25, 1, 0.5, 1] }
+    },
+    exit: {
+        opacity: 0,
+        scale: 1.02,
+        filter: 'blur(4px)',
+        transition: { duration: 0.2, ease: "easeIn" }
+    }
 };
 
 // Staggered Container for Lists
@@ -11,47 +21,87 @@ export const staggerContainer = {
     show: {
         opacity: 1,
         transition: {
-            staggerChildren: 0.1,
-            delayChildren: 0.1
+            staggerChildren: 0.08,
+            delayChildren: 0.05
         }
     }
 };
 
 // Standard Fade In Up (for items in a list)
 export const fadeInUp = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 30, scale: 0.95 },
     show: {
         opacity: 1,
         y: 0,
+        scale: 1,
         transition: {
             type: "spring",
-            stiffness: 260,
-            damping: 20
+            stiffness: 300,
+            damping: 25,
+            mass: 0.8
         }
     }
 };
 
-// Card Hover Effects
-export const cardVariants = {
-    hover: {
-        scale: 1.02,
-        y: -4,
-        transition: { type: "spring", stiffness: 400, damping: 10 }
+// Slide In From Right (for Drawers/Sidebars)
+export const slideInRight = {
+    hidden: { x: '100%', opacity: 0 },
+    show: {
+        x: 0,
+        opacity: 1,
+        transition: { type: "spring", stiffness: 300, damping: 30 }
     },
-    tap: {
-        scale: 0.95
+    exit: {
+        x: '100%',
+        opacity: 0,
+        transition: { duration: 0.2 }
     }
 };
 
-// Bounce (for badges)
+// Card Hover Effects
+export const cardHover = {
+    hover: {
+        y: -6,
+        scale: 1.02,
+        boxShadow: "0px 10px 30px rgba(0,0,0,0.1)",
+        transition: { type: "spring", stiffness: 400, damping: 10 }
+    },
+    tap: {
+        scale: 0.96,
+        transition: { type: "spring", stiffness: 400, damping: 10 }
+    }
+};
+
+// Button Interactions
+export const buttonClick = {
+    hover: { scale: 1.03, transition: { type: "spring", stiffness: 400, damping: 10 } },
+    tap: { scale: 0.92, transition: { type: "spring", stiffness: 400, damping: 10 } }
+};
+
+// Bounce (for badges/icons)
 export const bounce = {
-    initial: { scale: 0 },
+    initial: { scale: 0, opacity: 0 },
     animate: {
         scale: 1,
+        opacity: 1,
         transition: {
             type: "spring",
-            stiffness: 260,
-            damping: 20
+            stiffness: 400,
+            damping: 10,
+            delay: 0.2
+        }
+    }
+};
+
+// Pulse Animation (for live status)
+export const pulse = {
+    animate: {
+        scale: [1, 1.1, 1],
+        opacity: [1, 0.8, 1],
+        transition: {
+            duration: 2,
+            repeat: Infinity,
+            ease: "easeInOut"
         }
     }
 };
