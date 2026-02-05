@@ -4,6 +4,7 @@ import { Provider } from 'react-redux';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { store } from './store';
 import { SocketProvider } from './socket';
+import { BottomNav } from './components/BottomNav';
 
 import { Home } from './pages/Home';
 import { CanteenMenu } from './pages/CanteenMenu';
@@ -44,49 +45,52 @@ ReactDOM.createRoot(rootElement).render(
         <Provider store={store}>
             <SocketProvider>
                 <BrowserRouter>
-                    <Routes>
-                        {/* Public Routes */}
-                        <Route path="/" element={<Home />} />
-                        <Route path="/canteen/:id" element={<CanteenMenu />} />
-                        <Route path="/category/:category" element={<CategoryPage />} />
-                        <Route path="/search" element={<SearchResultsPage />} />
-                        <Route path="/cart" element={<Cart />} />
-                        <Route path="/login" element={<Login />} />
+                    <BottomNav />
+                    <div className="pb-24 md:pb-0 min-h-screen">
+                        <Routes>
+                            {/* Public Routes */}
+                            <Route path="/" element={<Home />} />
+                            <Route path="/canteen/:id" element={<CanteenMenu />} />
+                            <Route path="/category/:category" element={<CategoryPage />} />
+                            <Route path="/search" element={<SearchResultsPage />} />
+                            <Route path="/cart" element={<Cart />} />
+                            <Route path="/login" element={<Login />} />
 
-                        {/* Legacy routes - redirect to login (OTP no longer used) */}
-                        <Route path="/verify-phone" element={<Navigate to="/login" replace />} />
-                        <Route path="/verify-email" element={<Navigate to="/login" replace />} />
+                            {/* Legacy routes - redirect to login (OTP no longer used) */}
+                            <Route path="/verify-phone" element={<Navigate to="/login" replace />} />
+                            <Route path="/verify-email" element={<Navigate to="/login" replace />} />
 
-                        {/* Protected Routes */}
-                        <Route path="/order/:id" element={
-                            <ProtectedRoute>
-                                <OrderTracking />
-                            </ProtectedRoute>
-                        } />
+                            {/* Protected Routes */}
+                            <Route path="/order/:id" element={
+                                <ProtectedRoute>
+                                    <OrderTracking />
+                                </ProtectedRoute>
+                            } />
 
-                        <Route path="/profile" element={
-                            <ProtectedRoute>
-                                <Profile />
-                            </ProtectedRoute>
-                        } />
+                            <Route path="/profile" element={
+                                <ProtectedRoute>
+                                    <Profile />
+                                </ProtectedRoute>
+                            } />
 
-                        {/* Partner Routes */}
-                        <Route path="/partner" element={
-                            <ProtectedRoute allowedRoles={['partner']}>
-                                <PartnerDashboard />
-                            </ProtectedRoute>
-                        } />
+                            {/* Partner Routes */}
+                            <Route path="/partner" element={
+                                <ProtectedRoute allowedRoles={['partner']}>
+                                    <PartnerDashboard />
+                                </ProtectedRoute>
+                            } />
 
-                        {/* Admin Routes */}
-                        <Route path="/admin" element={
-                            <ProtectedRoute allowedRoles={['admin']}>
-                                <AdminDashboard />
-                            </ProtectedRoute>
-                        } />
+                            {/* Admin Routes */}
+                            <Route path="/admin" element={
+                                <ProtectedRoute allowedRoles={['admin']}>
+                                    <AdminDashboard />
+                                </ProtectedRoute>
+                            } />
 
-                        {/* Catch-all redirect */}
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                    </Routes>
+                            {/* Catch-all redirect */}
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </div>
                 </BrowserRouter>
             </SocketProvider>
         </Provider>

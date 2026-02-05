@@ -124,4 +124,35 @@ export const pulse = {
     }
 };
 
+// Bottom Sheet (Mobile)
+export const bottomSheetVariants = {
+    hidden: { y: "100%", opacity: 0 },
+    visible: {
+        y: 0,
+        opacity: 1,
+        transition: { type: "spring", damping: 25, stiffness: 300 }
+    },
+    exit: {
+        y: "100%",
+        opacity: 0,
+        transition: { type: "spring", damping: 25, stiffness: 300 }
+    }
+};
+
+// Button Press / Scale Effect
+export const buttonPress = {
+    tap: { scale: 0.95 },
+    hover: { scale: 1.05 }
+};
+
+// Scale & Bounce (for Notifications/Badges)
+export const scaleBounce = {
+    initial: { scale: 0 },
+    animate: {
+        scale: 1,
+        transition: { type: "spring", stiffness: 400, damping: 10 }
+    }
+};
+
 export const springTransition = { type: "spring", stiffness: 300, damping: 30 };
+
