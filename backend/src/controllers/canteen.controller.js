@@ -106,10 +106,9 @@ export const getCanteenMenu = async (req, res, next) => {
  * Get canteens filtered by category with ONLY items in that category
  * GET /api/canteens/by-category/:category
  * 
- * CRITICAL FIX v2: 
- * 1. Uses $toLower for reliable case-insensitive matching
- * 2. Uses pipeline-based $lookup to handle ObjectId conversion properly
- * 3. Adds debug logging to diagnose empty results
+ * CRITICAL FIX v3: Uses Mongoose find() + populate() approach
+ * The aggregation $lookup was failing silently because of ObjectId type mismatches.
+ * Mongoose's find() with populate() handles type coercion automatically.
  */
 export const getCanteensByCategory = async (req, res, next) => {
     try {
@@ -129,148 +128,91 @@ export const getCanteensByCategory = async (req, res, next) => {
         console.log('[getCanteensByCategory] Input:', category);
         console.log('[getCanteensByCategory] Normalized:', normalizedCategory);
 
-        // STEP 1: First, find all items matching this category (for debugging)
-        const matchingItemsRaw = await MenuItem.find({ inStock: true }).lean();
-        const matchingItems = matchingItemsRaw.filter(item =>
-            item.category && item.category.trim().toLowerCase() === normalizedCategory
-        );
-        console.log('[getCanteensByCategory] Matching items (direct query):', matchingItems.length);
+        // STEP 1: Get ALL in-stock menu items and filter by category (case-insensitive)
+        // Using Mongoose find() which properly handles ObjectId references
+        const allInStockItems = await MenuItem.find({ inStock: true })
+            .populate({
+                path: 'canteenId',
+                match: { isOpen: true, isApproved: true },
+                select: '_id name description image rating tags isOpen preparationTime priceRange'
+            })
+            .lean();
+
+        console.log('[getCanteensByCategory] Total in-stock items:', allInStockItems.length);
+
+        // STEP 2: Filter items by category (case-insensitive) and those with valid canteens
+        const matchingItems = allInStockItems.filter(item => {
+            // Check category match (case-insensitive)
+            const itemCategory = (item.category || '').trim().toLowerCase();
+            const categoryMatch = itemCategory === normalizedCategory;
+
+            // Check if canteen was populated (open + approved)
+            const hasValidCanteen = item.canteenId && typeof item.canteenId === 'object';
+
+            return categoryMatch && hasValidCanteen;
+        });
+
+        console.log('[getCanteensByCategory] Matching items after filter:', matchingItems.length);
 
         if (matchingItems.length > 0) {
-            console.log('[getCanteensByCategory] Sample item:', {
+            console.log('[getCanteensByCategory] Sample matching item:', {
                 name: matchingItems[0].name,
                 category: matchingItems[0].category,
-                canteenId: matchingItems[0].canteenId,
-                canteenIdType: typeof matchingItems[0].canteenId
+                canteenName: matchingItems[0].canteenId?.name
             });
         }
 
-        // STEP 2: Run the aggregation with enhanced $lookup
-        const results = await MenuItem.aggregate([
-            // Add a lowercase version of the category field
-            {
-                $addFields: {
-                    categoryLower: { $toLower: { $trim: { input: { $ifNull: ['$category', ''] } } } }
-                }
-            },
-            // Match items where lowercase category equals our query AND item is in stock
-            {
-                $match: {
-                    categoryLower: normalizedCategory,
-                    inStock: true
-                }
-            },
-            // CRITICAL FIX: Use pipeline-based $lookup with proper ObjectId handling
-            // This works whether canteenId is stored as ObjectId or string
-            {
-                $lookup: {
-                    from: 'canteens',
-                    let: { menuCanteenId: '$canteenId' },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $eq: ['$_id', '$$menuCanteenId']
-                                }
-                            }
-                        }
-                    ],
-                    as: 'canteen'
-                }
-            },
-            // Unwind the canteen array (each item has exactly one canteen)
-            // preserveNullAndEmptyArrays: true for debugging - we'll filter after
-            {
-                $unwind: {
-                    path: '$canteen',
-                    preserveNullAndEmptyArrays: true
-                }
-            },
-            // Add debug field to track why items might be filtered
-            {
-                $addFields: {
-                    _debug_hasCanteen: { $cond: [{ $ifNull: ['$canteen', false] }, true, false] },
-                    _debug_canteenOpen: { $ifNull: ['$canteen.isOpen', false] },
-                    _debug_canteenApproved: { $ifNull: ['$canteen.isApproved', false] }
-                }
-            },
-            // Only include items from open and approved canteens
-            {
-                $match: {
-                    'canteen.isOpen': true,
-                    'canteen.isApproved': true
-                }
-            },
-            // Group by canteen to collect all matching items per canteen
-            {
-                $group: {
-                    _id: '$canteen._id',
-                    canteen: { $first: '$canteen' },
-                    items: {
-                        $push: {
-                            _id: '$_id',
-                            name: '$name',
-                            description: '$description',
-                            price: '$price',
-                            image: '$image',
-                            isVeg: '$isVeg',
-                            inStock: '$inStock',
-                            category: '$category',
-                            preparationTime: '$preparationTime',
-                            canteenId: '$canteenId'
-                        }
-                    },
-                    itemCount: { $sum: 1 }
-                }
-            },
-            // Sort by canteen rating (highest first), then by item count
-            {
-                $sort: {
-                    'canteen.rating': -1,
-                    itemCount: -1
-                }
-            },
-            // Project the final shape
-            {
-                $project: {
-                    _id: 0,
+        // STEP 3: Group items by canteen
+        const canteenMap = new Map();
+
+        for (const item of matchingItems) {
+            const canteen = item.canteenId;
+            const canteenId = canteen._id.toString();
+
+            if (!canteenMap.has(canteenId)) {
+                canteenMap.set(canteenId, {
                     canteen: {
-                        _id: '$canteen._id',
-                        name: '$canteen.name',
-                        description: '$canteen.description',
-                        image: '$canteen.image',
-                        rating: '$canteen.rating',
-                        tags: '$canteen.tags',
-                        isOpen: '$canteen.isOpen',
-                        preparationTime: '$canteen.preparationTime',
-                        priceRange: '$canteen.priceRange'
+                        _id: canteen._id,
+                        name: canteen.name,
+                        description: canteen.description,
+                        image: canteen.image,
+                        rating: canteen.rating,
+                        tags: canteen.tags,
+                        isOpen: canteen.isOpen,
+                        preparationTime: canteen.preparationTime,
+                        priceRange: canteen.priceRange
                     },
-                    items: 1,
-                    itemCount: 1
-                }
-            }
-        ]);
-
-        console.log('[getCanteensByCategory] Aggregation results count:', results.length);
-
-        // DEBUG: If aggregation returns 0 but we found items, investigate why
-        if (results.length === 0 && matchingItems.length > 0) {
-            console.log('[getCanteensByCategory] DEBUG: Items found but aggregation empty!');
-
-            // Check canteen status for the first matching item
-            const sampleCanteenId = matchingItems[0].canteenId;
-            const canteen = await Canteen.findById(sampleCanteenId).lean();
-
-            if (canteen) {
-                console.log('[getCanteensByCategory] DEBUG: Canteen status:', {
-                    name: canteen.name,
-                    isOpen: canteen.isOpen,
-                    isApproved: canteen.isApproved
+                    items: [],
+                    itemCount: 0
                 });
-            } else {
-                console.log('[getCanteensByCategory] DEBUG: Canteen not found for id:', sampleCanteenId);
             }
+
+            const canteenData = canteenMap.get(canteenId);
+            canteenData.items.push({
+                _id: item._id,
+                name: item.name,
+                description: item.description,
+                price: item.price,
+                image: item.image,
+                isVeg: item.isVeg,
+                inStock: item.inStock,
+                category: item.category,
+                preparationTime: item.preparationTime,
+                canteenId: canteen._id
+            });
+            canteenData.itemCount++;
         }
+
+        // STEP 4: Convert map to array and sort by rating
+        const results = Array.from(canteenMap.values())
+            .sort((a, b) => {
+                // Sort by rating descending, then by item count descending
+                const ratingDiff = (b.canteen.rating || 0) - (a.canteen.rating || 0);
+                if (ratingDiff !== 0) return ratingDiff;
+                return b.itemCount - a.itemCount;
+            });
+
+        console.log('[getCanteensByCategory] Final results count:', results.length);
 
         // Return the filtered results
         res.json({
