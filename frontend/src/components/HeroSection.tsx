@@ -1,62 +1,69 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Sparkles } from 'lucide-react';
 
-// --- Ingredients Components ---
-// Custom SVGs for a premium, lightweight, vector-based look
+// --- Premium Vegetarian SVG Assets ---
+// Designed for subtle background integration
 
-const Pepperoni = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
+const TomatoSlice = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
     <svg viewBox="0 0 100 100" className={className} style={style}>
-        <circle cx="50" cy="50" r="45" fill="#EF4444" />
-        <circle cx="30" cy="30" r="5" fill="#B91C1C" opacity="0.6" />
-        <circle cx="70" cy="60" r="6" fill="#B91C1C" opacity="0.6" />
-        <circle cx="45" cy="75" r="5" fill="#B91C1C" opacity="0.6" />
+        {/* Core */}
+        <circle cx="50" cy="50" r="45" fill="#EF4444" className="drop-shadow-sm" />
+        <circle cx="50" cy="50" r="40" fill="#F87171" />
+        {/* Segments */}
+        <path d="M50,50 L50,10 M50,50 L85,30 M50,50 L85,70 M50,50 L50,90 M50,50 L15,70 M50,50 L15,30" stroke="#EF4444" strokeWidth="4" opacity="0.5" />
+        {/* Seeds */}
+        <circle cx="65" cy="40" r="3" fill="#FECACA" opacity="0.6" />
+        <circle cx="35" cy="60" r="3" fill="#FECACA" opacity="0.6" />
+        <circle cx="35" cy="40" r="3" fill="#FECACA" opacity="0.6" />
     </svg>
 );
 
-const Basil = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
+const PaneerBlock = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
     <svg viewBox="0 0 100 100" className={className} style={style}>
-        <path d="M50,90 Q10,50 50,10 Q90,50 50,90 Z" fill="#22C55E" />
-        <path d="M50,90 Q30,50 50,10" stroke="#15803D" strokeWidth="3" fill="none" opacity="0.5" />
+        {/* Cube body */}
+        <rect x="20" y="20" width="60" height="60" rx="12" fill="#FFFBEB" className="drop-shadow-sm" />
+        {/* Texture/Highlight */}
+        <rect x="25" y="25" width="50" height="50" rx="8" stroke="#FEF3C7" strokeWidth="2" fill="none" />
+        <circle cx="35" cy="35" r="2" fill="#FDE68A" opacity="0.4" />
+        <circle cx="65" cy="65" r="2" fill="#FDE68A" opacity="0.4" />
     </svg>
 );
 
-const Mushroom = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
+const MintLeaf = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
     <svg viewBox="0 0 100 100" className={className} style={style}>
-        <path d="M20,60 Q50,10 80,60" fill="#E5E7EB" />
-        <path d="M50,60 L50,90" stroke="#D1D5DB" strokeWidth="15" strokeLinecap="round" />
-        <path d="M20,60 Q50,70 80,60" fill="#D1D5DB" opacity="0.5" />
+        <path d="M50,90 Q10,55 50,10 Q90,55 50,90 Z" fill="#22C55E" className="drop-shadow-sm" />
+        <path d="M50,90 Q30,50 50,10" stroke="#166534" strokeWidth="2" fill="none" opacity="0.3" />
+        <path d="M50,60 Q70,50 80,40" stroke="#166534" strokeWidth="2" fill="none" opacity="0.2" />
+        <path d="M50,40 Q30,30 20,20" stroke="#166534" strokeWidth="2" fill="none" opacity="0.2" />
     </svg>
 );
 
-const Olive = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
+const DosaTriangle = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
     <svg viewBox="0 0 100 100" className={className} style={style}>
-        <circle cx="50" cy="50" r="40" stroke="#1F2937" strokeWidth="15" fill="none" />
+        {/* Cone shape */}
+        <path d="M50,10 L85,85 Q50,95 15,85 Z" fill="#F59E0B" className="drop-shadow-sm" />
+        {/* Golden texture */}
+        <path d="M50,10 L85,85" stroke="#D97706" strokeWidth="2" opacity="0.3" />
+        <circle cx="50" cy="50" r="15" fill="#FEF3C7" opacity="0.2" filter="blur(4px)" />
     </svg>
 );
 
-const Cheese = ({ className, style }: { className?: string, style?: React.CSSProperties }) => (
-    <svg viewBox="0 0 100 100" className={className} style={style}>
-        <path d="M10,50 Q30,20 50,50 T90,50" stroke="#FCD34D" strokeWidth="8" fill="none" strokeLinecap="round" />
-    </svg>
-);
-
-// --- Main Hero Component ---
+// --- Component ---
 
 export const HeroSection = () => {
-    // We use CSS variables for parallax to ensure 60fps performance without React re-renders
     const containerRef = useRef<HTMLDivElement>(null);
     const [isHovered, setIsHovered] = useState(false);
 
-    // Feature detection
+    // Environment Checks
     const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
-    // Update CSS variables directly on mouse move
+    // CSS Variable Parallax (High Performance)
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
         if (prefersReducedMotion || isTouchDevice || !containerRef.current) return;
 
         const rect = containerRef.current.getBoundingClientRect();
-        // Normalized coordinates (-1 to 1)
+        // Normalized -1 to 1 based on center
         const x = (e.clientX - rect.left - rect.width / 2) / (rect.width / 2);
         const y = (e.clientY - rect.top - rect.height / 2) / (rect.height / 2);
 
@@ -64,26 +71,27 @@ export const HeroSection = () => {
         containerRef.current.style.setProperty('--mouse-y', y.toFixed(3));
     }, [prefersReducedMotion, isTouchDevice]);
 
-    const handleMouseEnter = () => setIsHovered(true);
     const handleMouseLeave = () => {
         setIsHovered(false);
-        // Reset CSS vars to 0 gently
         if (containerRef.current) {
+            // Reset parallax genttly
             containerRef.current.style.setProperty('--mouse-x', '0');
             containerRef.current.style.setProperty('--mouse-y', '0');
         }
     };
 
     /**
-     * Helper to return style object using CSS calc() based on CSS variables
-     * This moves the math to the compositor thread (mostly)
+     * Calculates transform styles based on CSS variables.
+     * @param depth Multiplier for movement range (higher = closer/faster)
+     * @param initialRotation Base rotation
      */
     const getParallaxStyle = (depth: number, initialRotation: number) => {
         if (prefersReducedMotion || isTouchDevice) return {};
 
         return {
-            transform: `translate(calc(var(--mouse-x, 0) * ${depth * 25}px), calc(var(--mouse-y, 0) * ${depth * 25}px)) rotate(calc(${initialRotation}deg + (var(--mouse-x, 0) * 8deg)))`,
-            transition: 'transform 0.1s linear', // smooth catch-up
+            // Use CSS calc to bind to the variable set by JS
+            transform: `translate(calc(var(--mouse-x, 0) * ${depth * 15}px), calc(var(--mouse-y, 0) * ${depth * 15}px)) rotate(calc(${initialRotation}deg + (var(--mouse-x, 0) * 5deg)))`,
+            transition: 'transform 0.1s linear', // Ultra-smooth linear tracking
         };
     };
 
@@ -91,97 +99,90 @@ export const HeroSection = () => {
         <div
             ref={containerRef}
             onMouseMove={handleMouseMove}
-            onMouseEnter={handleMouseEnter}
+            onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={handleMouseLeave}
-            className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 border-b border-orange-100 group perspective-1000"
+            className={`
+                relative overflow-hidden bg-gradient-to-br from-orange-50 via-white to-amber-50 
+                border-b border-orange-100 group perspective-1000 min-h-[500px] flex items-center justify-center
+                transition-all duration-700 ease-out
+            `}
         >
-            {/* Background Glow Effect */}
+            {/* Ambient Glow (Intensifies on Hover) */}
             <div
                 className={`
-                    absolute inset-0 bg-gradient-to-r from-orange-200/20 to-amber-200/20 
-                    transition-opacity duration-700 ease-in-out
+                    absolute inset-0 bg-gradient-to-r from-orange-100/30 to-amber-100/30
+                    transition-opacity duration-1000 ease-in-out
                     ${isHovered ? 'opacity-100' : 'opacity-0'}
                 `}
             />
 
-            {/* Decorative Blobs */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob pointer-events-none"></div>
-            <div className="absolute -bottom-8 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000 pointer-events-none"></div>
+            {/* 
+                --- VEG PARALLAX LAYERS --- 
+                Revealed on Hover (Desktop) | Static Background (Mobile)
+            */}
 
-            {/* --- FLOATING INGREDIENTS --- */}
-
-            {/* Top Left: Pepperoni */}
+            {/* Top Left: Tomato Slice */}
             <div
-                className={`absolute top-10 left-10 md:left-20 transition-all duration-700 ease-out delay-75 ${isHovered || isTouchDevice ? 'opacity-80 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-90'}`}
-                style={getParallaxStyle(-1.5, -15)}
+                className={`absolute top-[10%] left-[5%] md:left-[15%] transition-all duration-700 ease-out z-0
+                    ${isTouchDevice ? 'opacity-20 scale-90' : isHovered ? 'opacity-70 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-75'}
+                `}
+                style={getParallaxStyle(-1.2, -15)}
             >
-                <div className={isTouchDevice ? 'animate-float' : ''}>
-                    <Pepperoni className="w-16 h-16 md:w-20 md:h-20 drop-shadow-lg" />
-                </div>
+                <TomatoSlice className="w-16 h-16 md:w-24 md:h-24 drop-shadow-md" />
             </div>
 
-            {/* Middle Left: Basil */}
+            {/* Top Right: Dosa Triangle */}
             <div
-                className={`absolute top-32 left-32 md:left-48 transition-all duration-700 ease-out delay-100 ${isHovered || isTouchDevice ? 'opacity-60 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-75'}`}
-                style={getParallaxStyle(-0.8, 45)}
+                className={`absolute top-[15%] right-[5%] md:right-[15%] transition-all duration-700 ease-out delay-75 z-0
+                    ${isTouchDevice ? 'opacity-20 scale-90' : isHovered ? 'opacity-60 translate-y-0 scale-100' : 'opacity-0 -translate-y-10 scale-75'}
+                `}
+                style={getParallaxStyle(1.0, 15)}
             >
-                <div className={isTouchDevice ? 'animate-float animation-delay-2000' : ''}>
-                    <Basil className="w-10 h-10 md:w-12 md:h-12 drop-shadow-md" />
-                </div>
+                <DosaTriangle className="w-20 h-20 md:w-28 md:h-28 drop-shadow-md" />
             </div>
 
-            {/* Top Right: Mushroom */}
+            {/* Bottom Left: Paneer Block */}
             <div
-                className={`absolute top-12 right-12 md:right-32 transition-all duration-700 ease-out delay-150 ${isHovered || isTouchDevice ? 'opacity-80 translate-y-0 scale-100' : 'opacity-0 -translate-y-8 scale-90'}`}
-                style={getParallaxStyle(1.2, 10)}
+                className={`absolute bottom-[15%] left-[8%] md:left-[20%] transition-all duration-700 ease-out delay-100 z-0
+                    ${isTouchDevice ? 'opacity-20 scale-90' : isHovered ? 'opacity-60 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-75'}
+                `}
+                style={getParallaxStyle(0.8, 10)}
             >
-                <div className={isTouchDevice ? 'animate-float animation-delay-4000' : ''}>
-                    <Mushroom className="w-14 h-14 md:w-18 md:h-18 drop-shadow-lg" />
-                </div>
+                <PaneerBlock className="w-14 h-14 md:w-20 md:h-20 drop-shadow-md" />
             </div>
 
-            {/* Bottom Left: Cheese */}
+            {/* Bottom Right: Mint Leaf */}
             <div
-                className={`absolute bottom-20 left-12 md:left-1/4 transition-all duration-700 ease-out delay-200 ${isHovered || isTouchDevice ? 'opacity-70 translate-y-0 scale-100' : 'opacity-0 translate-y-12 scale-90'}`}
-                style={getParallaxStyle(-1.2, -30)}
+                className={`absolute bottom-[20%] right-[10%] md:right-[20%] transition-all duration-700 ease-out delay-150 z-0
+                    ${isTouchDevice ? 'opacity-20 scale-90' : isHovered ? 'opacity-70 translate-y-0 scale-100' : 'opacity-0 translate-y-8 scale-75'}
+                `}
+                style={getParallaxStyle(-1.5, -30)}
             >
-                <div className={isTouchDevice ? 'animate-float' : ''}>
-                    <Cheese className="w-12 h-12 md:w-16 md:h-16 drop-shadow-sm" />
-                </div>
-            </div>
-
-            {/* Bottom Right: Olive */}
-            <div
-                className={`absolute bottom-10 right-10 md:right-1/4 transition-all duration-700 ease-out delay-300 ${isHovered || isTouchDevice ? 'opacity-80 translate-y-0 scale-100' : 'opacity-0 translate-y-10 scale-75'}`}
-                style={getParallaxStyle(1.5, 20)}
-            >
-                <div className={isTouchDevice ? 'animate-float animation-delay-2000' : ''}>
-                    <Olive className="w-12 h-12 md:w-14 md:h-14 drop-shadow-lg" />
-                </div>
+                <MintLeaf className="w-12 h-12 md:w-16 md:h-16 drop-shadow-sm" />
             </div>
 
 
-            {/* Main Content Area */}
+            {/* --- Main Content (Text & CTA) --- */}
             <div className={`
-                relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 text-center z-10
+                relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center z-10
                 transition-transform duration-700 ease-out
                 ${isHovered ? 'scale-[1.02]' : 'scale-100'}
             `}>
 
                 {/* Badge */}
                 <div className={`
-                    inline-flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-md rounded-full text-sm font-semibold text-orange-600 mb-6 shadow-md
+                    inline-flex items-center gap-2 px-5 py-2.5 bg-white/90 backdrop-blur-md rounded-full text-sm font-bold text-orange-600 mb-8 shadow-sm border border-white/50
                     transition-all duration-500
-                    ${isHovered ? 'shadow-orange-200/50 translate-y-[-2px]' : 'shadow-sm'}
+                    ${isHovered ? 'shadow-orange-200/50 -translate-y-1' : ''}
                 `}>
                     <Sparkles size={16} className="animate-pulse text-amber-500" />
-                    <span className="bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                    <span className="bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent tracking-wide">
                         Order from campus canteens
                     </span>
                 </div>
 
                 {/* Main Heading */}
-                <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-gray-900 mb-6 tracking-tight drop-shadow-sm">
+                <h1 className="text-5xl sm:text-6xl md:text-7xl font-black text-gray-900 mb-8 tracking-tight drop-shadow-sm leading-tight">
                     Hungry?
                     <span className={`
                         block mt-2 bg-gradient-to-r from-orange-600 via-amber-500 to-orange-600 
@@ -194,9 +195,11 @@ export const HeroSection = () => {
                 </h1>
 
                 {/* Subtext */}
-                <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto font-medium leading-relaxed">
+                <p className="text-xl text-gray-600 max-w-2xl mx-auto font-medium leading-relaxed mb-10">
                     Fast delivery from your favorite campus canteens directly to your classroom or dorm.
                 </p>
+
+                {/* Optional CTA or visual anchor if needed, currently pure text focus per requirement */}
             </div>
         </div>
     );
