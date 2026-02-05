@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Clock, Heart } from 'lucide-react';
-import { fadeInUp, cardVariants } from '../utils/motion';
-
+import { fadeInUp, cardHover } from '../utils/motion';
 interface Canteen {
     _id: string;
     name: string;
@@ -26,8 +25,8 @@ export const CanteenCard = ({ canteen, onClick }: CanteenCardProps) => {
         <motion.div
             layout
             variants={fadeInUp}
-            whileHover={cardVariants.hover}
-            whileTap={cardVariants.tap}
+            whileHover={cardHover.hover}
+            whileTap={cardHover.tap}
             onClick={onClick}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { updateUser, showNotification, logout } from '../store';
 import type { RootState } from '../store';
 import { authAPI } from '../api';
-import { User, Lock, Save, Loader2, Mail, Phone, Shield, CheckCircle, LogOut } from 'lucide-react';
+import { User, Lock, Save, Loader2, Mail, Phone, Shield, CheckCircle, LogOut, XCircle } from 'lucide-react';
 import { pageVariants, fadeInUp, buttonClick } from '../utils/motion';
 import { Navbar } from '../components/Navbar';
 

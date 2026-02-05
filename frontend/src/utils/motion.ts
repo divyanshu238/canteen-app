@@ -72,6 +72,24 @@ export const cardHover = {
     }
 };
 
+// Explicit Card Variants (for staggered lists)
+export const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+        opacity: 1,
+        y: 0,
+        transition: { type: "spring", stiffness: 120, damping: 14 }
+    }
+};
+
+// Simple Hover Lift
+export const hoverLift = {
+    hover: {
+        y: -5,
+        transition: { type: "spring", stiffness: 400, damping: 10 }
+    }
+};
+
 // Button Interactions
 export const buttonClick = {
     hover: { scale: 1.03, transition: { type: "spring", stiffness: 400, damping: 10 } },
