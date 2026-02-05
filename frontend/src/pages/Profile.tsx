@@ -26,6 +26,10 @@ export const Profile = () => {
         confirmPassword: ''
     });
 
+    // Explicit UI Feedback State
+    const [errorMessage, setErrorMessage] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+
     const handleProfileSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -61,28 +65,23 @@ export const Profile = () => {
     const handlePasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Clear previous messages
+        setErrorMessage('');
+        setSuccessMessage('');
+
         // 1. Client-side Validation
         if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-            dispatch(showNotification({
-                message: 'All password fields are required',
-                type: 'error'
-            }));
+            setErrorMessage('All password fields are required');
             return;
         }
 
         if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            dispatch(showNotification({
-                message: 'New password and confirm password do not match',
-                type: 'error'
-            }));
+            setErrorMessage('New password and confirm password do not match');
             return;
         }
 
         if (passwordForm.newPassword.length < 6) {
-            dispatch(showNotification({
-                message: 'New password must be at least 6 characters',
-                type: 'error'
-            }));
+            setErrorMessage('New password must be at least 6 characters');
             return;
         }
 
@@ -96,33 +95,24 @@ export const Profile = () => {
             });
 
             // 3. Success Handling
-            if (data.success) {
-                dispatch(showNotification({
-                    message: data.message || 'Password changed successfully',
-                    type: 'success'
-                }));
+            setSuccessMessage(data.message || 'Password updated successfully');
 
-                // Clear form
-                setPasswordForm({
-                    currentPassword: '',
-                    newPassword: '',
-                    confirmPassword: ''
-                });
+            // Clear form
+            setPasswordForm({
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
+            });
 
-                // Stay on security tab so user sees the clean state
-            }
         } catch (error: any) {
             // 4. Error Handling
             console.error('Change password check failed:', error);
 
-            const errorMessage = error.response?.data?.error ||
-                error.response?.data?.message ||
-                'Failed to change password. Please try again.';
+            const msg = error.response?.data?.message ||
+                error.response?.data?.error ||
+                'Failed to update password';
 
-            dispatch(showNotification({
-                message: errorMessage,
-                type: 'error'
-            }));
+            setErrorMessage(msg);
         } finally {
             setIsLoading(false);
         }
@@ -253,6 +243,19 @@ export const Profile = () => {
                                         <h2 className="text-xl font-bold text-gray-900">Change Password</h2>
                                         <p className="text-sm text-gray-500 mt-1">Ensure your account uses a long, random password to stay secure.</p>
                                     </div>
+
+                                    {/* Explicit UI Feedback Messages */}
+                                    {errorMessage && (
+                                        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+                                            {errorMessage}
+                                        </div>
+                                    )}
+
+                                    {successMessage && (
+                                        <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-green-700">
+                                            {successMessage}
+                                        </div>
+                                    )}
 
                                     <div className="grid gap-6">
                                         <div>
