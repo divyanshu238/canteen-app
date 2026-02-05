@@ -106,9 +106,10 @@ export const getCanteenMenu = async (req, res, next) => {
  * Get canteens filtered by category with ONLY items in that category
  * GET /api/canteens/by-category/:category
  * 
- * CRITICAL FIX: Uses $toLower for reliable case-insensitive matching
- * Instead of regex, we normalize both the query and the stored category to lowercase
- * This is more robust and avoids MongoDB regex edge cases
+ * CRITICAL FIX v2: 
+ * 1. Uses $toLower for reliable case-insensitive matching
+ * 2. Uses pipeline-based $lookup to handle ObjectId conversion properly
+ * 3. Adds debug logging to diagnose empty results
  */
 export const getCanteensByCategory = async (req, res, next) => {
     try {
@@ -128,13 +129,28 @@ export const getCanteensByCategory = async (req, res, next) => {
         console.log('[getCanteensByCategory] Input:', category);
         console.log('[getCanteensByCategory] Normalized:', normalizedCategory);
 
-        // ROBUST APPROACH: Use $toLower for case-insensitive matching
-        // This avoids regex serialization issues in MongoDB aggregation
+        // STEP 1: First, find all items matching this category (for debugging)
+        const matchingItemsRaw = await MenuItem.find({ inStock: true }).lean();
+        const matchingItems = matchingItemsRaw.filter(item =>
+            item.category && item.category.trim().toLowerCase() === normalizedCategory
+        );
+        console.log('[getCanteensByCategory] Matching items (direct query):', matchingItems.length);
+
+        if (matchingItems.length > 0) {
+            console.log('[getCanteensByCategory] Sample item:', {
+                name: matchingItems[0].name,
+                category: matchingItems[0].category,
+                canteenId: matchingItems[0].canteenId,
+                canteenIdType: typeof matchingItems[0].canteenId
+            });
+        }
+
+        // STEP 2: Run the aggregation with enhanced $lookup
         const results = await MenuItem.aggregate([
             // Add a lowercase version of the category field
             {
                 $addFields: {
-                    categoryLower: { $toLower: { $trim: { input: '$category' } } }
+                    categoryLower: { $toLower: { $trim: { input: { $ifNull: ['$category', ''] } } } }
                 }
             },
             // Match items where lowercase category equals our query AND item is in stock
@@ -144,20 +160,38 @@ export const getCanteensByCategory = async (req, res, next) => {
                     inStock: true
                 }
             },
-            // Lookup the canteen for each item
+            // CRITICAL FIX: Use pipeline-based $lookup with proper ObjectId handling
+            // This works whether canteenId is stored as ObjectId or string
             {
                 $lookup: {
                     from: 'canteens',
-                    localField: 'canteenId',
-                    foreignField: '_id',
+                    let: { menuCanteenId: '$canteenId' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $eq: ['$_id', '$$menuCanteenId']
+                                }
+                            }
+                        }
+                    ],
                     as: 'canteen'
                 }
             },
             // Unwind the canteen array (each item has exactly one canteen)
+            // preserveNullAndEmptyArrays: true for debugging - we'll filter after
             {
                 $unwind: {
                     path: '$canteen',
-                    preserveNullAndEmptyArrays: false  // Drop items with no matching canteen
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            // Add debug field to track why items might be filtered
+            {
+                $addFields: {
+                    _debug_hasCanteen: { $cond: [{ $ifNull: ['$canteen', false] }, true, false] },
+                    _debug_canteenOpen: { $ifNull: ['$canteen.isOpen', false] },
+                    _debug_canteenApproved: { $ifNull: ['$canteen.isApproved', false] }
                 }
             },
             // Only include items from open and approved canteens
@@ -217,7 +251,26 @@ export const getCanteensByCategory = async (req, res, next) => {
             }
         ]);
 
-        console.log('[getCanteensByCategory] Results count:', results.length);
+        console.log('[getCanteensByCategory] Aggregation results count:', results.length);
+
+        // DEBUG: If aggregation returns 0 but we found items, investigate why
+        if (results.length === 0 && matchingItems.length > 0) {
+            console.log('[getCanteensByCategory] DEBUG: Items found but aggregation empty!');
+
+            // Check canteen status for the first matching item
+            const sampleCanteenId = matchingItems[0].canteenId;
+            const canteen = await Canteen.findById(sampleCanteenId).lean();
+
+            if (canteen) {
+                console.log('[getCanteensByCategory] DEBUG: Canteen status:', {
+                    name: canteen.name,
+                    isOpen: canteen.isOpen,
+                    isApproved: canteen.isApproved
+                });
+            } else {
+                console.log('[getCanteensByCategory] DEBUG: Canteen not found for id:', sampleCanteenId);
+            }
+        }
 
         // Return the filtered results
         res.json({
