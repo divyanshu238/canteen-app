@@ -1,12 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { addToCart, removeFromCart } from '../store';
 import type { RootState, MenuItem } from '../store';
 import { canteenAPI } from '../api';
 import { Navbar } from '../components/Navbar';
-import { Star, Clock, Search, Plus, Minus, RotateCcw } from 'lucide-react';
+import { MenuItemCard } from '../components/MenuItemCard';
+import { MenuSkeleton } from '../components/MenuSkeleton';
+import { Star, Clock, Search, ChevronLeft, MapPin } from 'lucide-react';
 import { useOrderHistory } from '../hooks/useOrderHistory';
+import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { pageVariants, staggerContainer } from '../utils/motion';
 
 interface Canteen {
     _id: string;
@@ -17,6 +21,7 @@ interface Canteen {
     priceRange: string;
     preparationTime?: string;
     description?: string;
+    location?: string;
 }
 
 interface MenuItemData extends MenuItem {
@@ -25,12 +30,18 @@ interface MenuItemData extends MenuItem {
 
 export const CanteenMenu = () => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [canteen, setCanteen] = useState<Canteen | null>(null);
     const [menu, setMenu] = useState<MenuItemData[]>([]);
     const [menuByCategory, setMenuByCategory] = useState<Record<string, MenuItemData[]>>({});
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeCategory, setActiveCategory] = useState<string>('');
+
+    // Scroll handling for parallax
+    const { scrollY } = useScroll();
+    const yRange = useTransform(scrollY, [0, 300], [0, 150]);
+    const opacityRange = useTransform(scrollY, [0, 300], [1, 0]);
 
     const dispatch = useDispatch();
     const cartItems = useSelector((state: RootState) => state.cart.items);
@@ -41,13 +52,16 @@ export const CanteenMenu = () => {
     useEffect(() => {
         if (id) {
             setLoading(true);
+            window.scrollTo(0, 0);
             canteenAPI.getMenu(id)
                 .then(res => {
                     setCanteen(res.data.data.canteen);
                     setMenu(res.data.data.menu);
-                    setMenuByCategory(res.data.data.menuByCategory || {});
-                    if (res.data.data.menuByCategory) {
-                        const categories = Object.keys(res.data.data.menuByCategory);
+                    const grouped = res.data.data.menuByCategory || {};
+                    setMenuByCategory(grouped);
+
+                    if (grouped) {
+                        const categories = Object.keys(grouped);
                         if (categories.length > 0) {
                             setActiveCategory(categories[0]);
                         }
@@ -75,7 +89,9 @@ export const CanteenMenu = () => {
     };
 
     const categories = Object.keys(menuByCategory);
-    const filteredMenu = searchQuery
+
+    // Filter logic
+    const displayedItems = searchQuery
         ? menu.filter(item =>
             item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.category?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -86,14 +102,19 @@ export const CanteenMenu = () => {
         return (
             <div className="min-h-screen bg-gray-50">
                 <Navbar />
-                <div className="max-w-6xl mx-auto px-4 py-8">
-                    <div className="animate-pulse space-y-4">
-                        <div className="h-48 bg-gray-200 rounded-3xl"></div>
-                        <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-                        <div className="grid grid-cols-2 gap-4">
-                            {[1, 2, 3, 4].map(i => (
-                                <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
+                <div className="max-w-7xl mx-auto px-4 py-8">
+                    {/* Hero Skeleton */}
+                    <div className="h-64 bg-gray-200 rounded-3xl animate-pulse mb-8" />
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                        {/* Sidebar Skeleton */}
+                        <div className="hidden lg:block space-y-4">
+                            {[1, 2, 3, 4, 5].map(i => (
+                                <div key={i} className="h-10 bg-gray-200 rounded-xl animate-pulse" />
                             ))}
+                        </div>
+                        {/* Menu Skeleton */}
+                        <div className="lg:col-span-3">
+                            <MenuSkeleton />
                         </div>
                     </div>
                 </div>
@@ -105,181 +126,242 @@ export const CanteenMenu = () => {
         return (
             <div className="min-h-screen bg-gray-50">
                 <Navbar />
-                <div className="flex items-center justify-center py-20">
-                    <p className="text-gray-500">Canteen not found</p>
+                <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+                    <div className="text-6xl mb-4">🏪</div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Canteen not found</h2>
+                    <p className="text-gray-500 mb-6">The canteen you are looking for does not exist or has been removed.</p>
+                    <button
+                        onClick={() => navigate('/')}
+                        className="px-6 py-2 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-colors"
+                    >
+                        Back to Home
+                    </button>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <motion.div
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            variants={pageVariants}
+            className="min-h-screen bg-gray-50/50"
+        >
             <Navbar />
 
-            {/* Canteen Header */}
-            <div className="relative h-64 overflow-hidden">
-                <img
-                    src={canteen.image}
-                    alt={canteen.name}
-                    className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
-                <div className="absolute bottom-0 left-0 right-0 p-6 max-w-6xl mx-auto">
-                    <h1 className="text-3xl font-black text-white mb-2">{canteen.name}</h1>
-                    <div className="flex items-center gap-4 text-white/90">
-                        <div className="flex items-center gap-1.5 bg-green-600 px-2.5 py-1 rounded-lg">
-                            <Star size={14} fill="white" />
-                            <span className="font-bold">{canteen.rating}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <Clock size={14} />
-                            <span>{canteen.preparationTime || '20-30 min'}</span>
-                        </div>
-                        <span>{canteen.tags?.join(" • ") || "Fast Food"}</span>
+            {/* Parallax Hero Section */}
+            <div className="relative h-[300px] lg:h-[350px] overflow-hidden">
+                <motion.div
+                    style={{ y: yRange }}
+                    className="absolute inset-0"
+                >
+                    <img
+                        src={canteen.image}
+                        alt={canteen.name}
+                        className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
+                </motion.div>
+
+                {/* Back Button */}
+                <button
+                    onClick={() => navigate('/')}
+                    className="absolute top-4 left-4 z-10 p-2 bg-white/20 backdrop-blur-md rounded-full text-white hover:bg-white/30 transition-colors"
+                >
+                    <ChevronLeft size={24} />
+                </button>
+
+                {/* Canteen Info Content */}
+                <motion.div
+                    style={{ opacity: opacityRange }}
+                    className="absolute bottom-0 left-0 right-0 p-4 sm:p-8 max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-end justify-between gap-4"
+                >
+                    <div className="text-white">
+                        <motion.h1
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="text-3xl sm:text-4xl md:text-5xl font-black mb-2 tracking-tight"
+                        >
+                            {canteen.name}
+                        </motion.h1>
+                        <motion.div
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.3 }}
+                            className="flex flex-wrap items-center gap-4 text-sm sm:text-base font-medium text-white/90"
+                        >
+                            <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg flex items-center gap-1.5 border border-white/10">
+                                <Star size={16} className="text-yellow-400" fill="currentColor" />
+                                <span className="font-bold text-white">{canteen.rating}</span>
+                                <span className="text-white/60 text-xs">(500+)</span>
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <Clock size={16} />
+                                {canteen.preparationTime || '20-30 min'}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <MapPin size={16} />
+                                {canteen.location || 'Campus Center'}
+                            </span>
+                        </motion.div>
+                        <motion.p
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.4 }}
+                            className="mt-2 text-white/70 max-w-xl text-sm sm:text-base line-clamp-1"
+                        >
+                            {canteen.description || "Best food in campus, made fresh everyday."}
+                        </motion.p>
                     </div>
-                </div>
+                </motion.div>
             </div>
 
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                {/* Search Bar */}
-                <div className="relative mb-6">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Search for dishes..."
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    />
-                </div>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+                <div className="flex flex-col lg:flex-row gap-8">
+                    {/* Left Sidebar: Categories & Search */}
+                    <div className="lg:w-64 flex-shrink-0 space-y-6">
+                        {/* Search Box */}
+                        <div className="relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={18} />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => {
+                                    setSearchQuery(e.target.value);
+                                    if (e.target.value) setActiveCategory(''); // Clear category when searching
+                                }}
+                                placeholder="Search menu..."
+                                className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all shadow-sm font-medium"
+                            />
+                        </div>
 
-                <div className="flex gap-6">
-                    {/* Category Sidebar */}
-                    {!searchQuery && categories.length > 0 && (
-                        <div className="hidden md:block w-48 flex-shrink-0">
-                            <div className="sticky top-24 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                                <h3 className="font-bold text-gray-900 mb-3">Categories</h3>
+                        {/* Categories Desktop */}
+                        {!searchQuery && categories.length > 0 && (
+                            <div className="hidden lg:block sticky top-24">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1">
+                                    Categories
+                                </h3>
                                 <div className="space-y-1">
                                     {categories.map(cat => (
                                         <button
                                             key={cat}
                                             onClick={() => setActiveCategory(cat)}
-                                            className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeCategory === cat
-                                                ? 'bg-orange-100 text-orange-600'
-                                                : 'text-gray-600 hover:bg-gray-50'
+                                            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden group ${activeCategory === cat
+                                                    ? 'text-orange-600 bg-orange-50'
+                                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                                                 }`}
                                         >
-                                            {cat} ({menuByCategory[cat]?.length || 0})
+                                            <span className="relative z-10 flex justify-between items-center">
+                                                {cat}
+                                                <span className={`text-xs px-2 py-0.5 rounded-md transition-colors ${activeCategory === cat ? 'bg-orange-100' : 'bg-gray-200'
+                                                    }`}>
+                                                    {menuByCategory[cat]?.length || 0}
+                                                </span>
+                                            </span>
+                                            {activeCategory === cat && (
+                                                <motion.div
+                                                    layoutId="activeCategory"
+                                                    className="absolute inset-0 bg-orange-50 border-l-4 border-orange-500"
+                                                    initial={false}
+                                                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                                />
+                                            )}
                                         </button>
                                     ))}
                                 </div>
                             </div>
+                        )}
+                    </div>
+
+                    {/* Mobile Category Scroller */}
+                    {!searchQuery && categories.length > 0 && (
+                        <div className="lg:hidden -mx-4 px-4 overflow-x-auto scrollbar-hide sticky top-[80px] z-30 bg-gray-50/95 backdrop-blur-sm py-2 border-b border-gray-200/50">
+                            <div className="flex gap-2 min-w-max">
+                                {categories.map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setActiveCategory(cat)}
+                                        className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${activeCategory === cat
+                                                ? 'bg-orange-600 text-white border-orange-600 shadow-lg shadow-orange-200'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                                            }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    {/* Menu Items */}
-                    <div className="flex-1">
-                        {searchQuery && (
-                            <p className="text-sm text-gray-500 mb-4">
-                                {filteredMenu.length} results for "{searchQuery}"
-                            </p>
-                        )}
-
-                        <div className="grid gap-4">
-                            {filteredMenu.map(item => {
-                                const qty = getItemQty(item._id);
-                                const itemHistory = orderedItems[item._id];
-                                const wasPreviouslyOrdered = !!itemHistory;
-                                const orderCount = itemHistory?.orderCount || 0;
-
-                                return (
-                                    <div
-                                        key={item._id}
-                                        className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-4"
-                                    >
-                                        {/* Item Image */}
-                                        {item.image && (
-                                            <div className="w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden">
-                                                <img
-                                                    src={item.image}
-                                                    alt={item.name}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* Item Details */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-start gap-2 mb-1">
-                                                {/* Veg/Non-veg indicator */}
-                                                <div className={`w-4 h-4 border-2 flex items-center justify-center mt-1 flex-shrink-0 ${item.isVeg ? 'border-green-600' : 'border-red-600'
-                                                    }`}>
-                                                    <div className={`w-2 h-2 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'
-                                                        }`}></div>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h3 className="font-bold text-gray-900">{item.name}</h3>
-                                                    {/* Previously Ordered Badge */}
-                                                    {wasPreviouslyOrdered && (
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <RotateCcw size={11} className="text-amber-600" />
-                                                            <span className="text-xs font-semibold text-amber-700">
-                                                                {orderCount > 1 ? `Ordered ${orderCount}x` : 'Previously ordered'}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {item.description && (
-                                                <p className="text-sm text-gray-500 mb-2 line-clamp-2">
-                                                    {item.description}
-                                                </p>
-                                            )}
-
-                                            <p className="text-lg font-bold text-gray-900">₹{item.price}</p>
-                                        </div>
-
-                                        {/* Add to Cart Button */}
-                                        <div className="flex items-center">
-                                            {qty === 0 ? (
-                                                <button
-                                                    onClick={() => handleAddToCart(item)}
-                                                    className="px-6 py-2 bg-white border-2 border-green-600 text-green-600 font-bold rounded-xl hover:bg-green-50 transition-colors"
-                                                >
-                                                    ADD
-                                                </button>
-                                            ) : (
-                                                <div className="flex items-center bg-green-600 text-white rounded-xl overflow-hidden">
-                                                    <button
-                                                        onClick={() => handleRemoveFromCart(item._id)}
-                                                        className="px-3 py-2 hover:bg-green-700 transition-colors"
-                                                    >
-                                                        <Minus size={16} strokeWidth={3} />
-                                                    </button>
-                                                    <span className="px-3 font-bold">{qty}</span>
-                                                    <button
-                                                        onClick={() => handleAddToCart(item)}
-                                                        className="px-3 py-2 hover:bg-green-700 transition-colors"
-                                                    >
-                                                        <Plus size={16} strokeWidth={3} />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                    {/* Menu Items Grid */}
+                    <div className="flex-1 min-h-[50vh]">
+                        <div className="flex justify-between items-end mb-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900">
+                                    {searchQuery ? `Search Results` : activeCategory}
+                                </h2>
+                                <p className="text-gray-500 text-sm mt-1 font-medium">
+                                    {displayedItems.length} items available
+                                </p>
+                            </div>
                         </div>
 
-                        {filteredMenu.length === 0 && (
-                            <div className="text-center py-12">
-                                <p className="text-gray-500">No items found</p>
-                            </div>
-                        )}
+                        <AnimatePresence mode='wait'>
+                            {displayedItems.length > 0 ? (
+                                <motion.div
+                                    key={activeCategory + searchQuery}
+                                    variants={staggerContainer}
+                                    initial="hidden"
+                                    animate="show"
+                                    exit="exit"
+                                    className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6"
+                                >
+                                    {displayedItems.map(item => {
+                                        const qty = getItemQty(item._id);
+                                        const itemHistory = orderedItems[item._id];
+                                        return (
+                                            <MenuItemCard
+                                                key={item._id}
+                                                item={item}
+                                                qty={qty}
+                                                wasPreviouslyOrdered={!!itemHistory}
+                                                orderCount={itemHistory?.orderCount || 0}
+                                                onAdd={handleAddToCart}
+                                                onRemove={handleRemoveFromCart}
+                                            />
+                                        );
+                                    })}
+                                </motion.div>
+                            ) : (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="flex flex-col items-center justify-center py-20 text-center"
+                                >
+                                    <div className="bg-white p-6 rounded-full shadow-sm mb-4">
+                                        <Search size={48} className="text-gray-200" />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-gray-900 mb-1">No items found</h3>
+                                    <p className="text-gray-500 max-w-xs mx-auto">
+                                        Try searching for something else or switch categories.
+                                    </p>
+                                    {searchQuery && (
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            className="mt-4 text-orange-600 font-bold hover:underline"
+                                        >
+                                            Clear Search
+                                        </button>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 };
