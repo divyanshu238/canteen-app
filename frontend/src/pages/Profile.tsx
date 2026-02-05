@@ -90,8 +90,12 @@ export const Profile = () => {
                 setActiveTab('details');
             }
         } catch (error: any) {
+            const errorMessage = error.response?.data?.error ||
+                error.response?.data?.message ||
+                'Failed to change password';
+
             dispatch(showNotification({
-                message: error.response?.data?.error || 'Failed to change password',
+                message: errorMessage,
                 type: 'error'
             }));
         } finally {

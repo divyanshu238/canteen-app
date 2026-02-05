@@ -75,18 +75,33 @@ userSchema.index({ phoneNumber: 1 });
 userSchema.index({ role: 1, isActive: 1 });
 
 // ============================================
-// PRE-SAVE HOOK - HANDLE PASSWORD HASHING
+// PRE-SAVE HOOK - HANDLE PASSWORD HASHING & FORMATTING
 // ============================================
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-
-    try {
-        const salt = await bcrypt.genSalt(12);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (error) {
-        next(error);
+    // 1. Hash Password if modified
+    if (this.isModified('password')) {
+        try {
+            const salt = await bcrypt.genSalt(12);
+            this.password = await bcrypt.hash(this.password, salt);
+        } catch (error) {
+            return next(error);
+        }
     }
+
+    // 2. Normalize Phone Number if it exists (Fix legacy data issues)
+    if (this.phoneNumber) {
+        // Remove all non-digits
+        const digits = this.phoneNumber.replace(/\D/g, '');
+        // If it looks like a valid Indian number (10 digits) without country code, add it
+        if (digits.length === 10) {
+            this.phoneNumber = `+91${digits}`;
+        } else if (digits.length > 10 && !this.phoneNumber.startsWith('+')) {
+            // Already includes country code but missing +
+            this.phoneNumber = `+${digits}`;
+        }
+    }
+
+    next();
 });
 
 // Transform output (remove sensitive fields)

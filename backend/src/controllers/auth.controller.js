@@ -487,10 +487,18 @@ export const changePassword = async (req, res, next) => {
             });
         }
 
-        // Get user with password select
+        // 1. Get user with password select
+        // We use findById so we get a Mongoose Document (required for .save())
         const user = await User.findById(req.user._id).select('+password');
 
-        // Verify current password
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        // 2. Verify current password
         const isMatch = await bcrypt.compare(currentPassword, user.password);
         if (!isMatch) {
             return res.status(401).json({
@@ -499,8 +507,11 @@ export const changePassword = async (req, res, next) => {
             });
         }
 
-        // Update password (pre-save hook will hash this)
+        // 3. Update password
+        // We assign the plain text password. The pre('save') hook in models/index.js will hash it.
         user.password = newPassword;
+
+        // 4. Save (Triggers pre-save hooks and validation)
         await user.save();
 
         // Optional: Revoke all refresh tokens (logout from other devices)
@@ -511,6 +522,17 @@ export const changePassword = async (req, res, next) => {
             message: 'Password updated successfully'
         });
     } catch (error) {
+        console.error('❌ CHANGE PASSWORD ERROR:', error);
+
+        // Handle Mongoose Validation Errors specifically
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            return res.status(400).json({
+                success: false,
+                error: messages.join(', ') || 'Validation failed'
+            });
+        }
+
         next(error);
     }
 };
