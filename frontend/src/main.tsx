@@ -14,6 +14,7 @@ import { OrderTracking } from './pages/OrderTracking';
 import { Login } from './pages/Login';
 import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { Profile } from './pages/Profile';
 import './index.css';
 
 // Protected Route Components
@@ -60,6 +61,12 @@ ReactDOM.createRoot(rootElement).render(
                         <Route path="/order/:id" element={
                             <ProtectedRoute>
                                 <OrderTracking />
+                            </ProtectedRoute>
+                        } />
+
+                        <Route path="/profile" element={
+                            <ProtectedRoute>
+                                <Profile />
                             </ProtectedRoute>
                         } />
 

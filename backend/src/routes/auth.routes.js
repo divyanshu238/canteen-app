@@ -65,4 +65,12 @@ router.get('/me', authenticate, authController.getMe);
  */
 router.put('/profile', authenticate, authController.updateProfile);
 
+/**
+ * @route   PUT /api/auth/change-password
+ * @desc    Change user password
+ * @access  Private
+ * @body    { currentPassword, newPassword }
+ */
+router.put('/change-password', authenticate, authController.changePassword);
+
 export default router;

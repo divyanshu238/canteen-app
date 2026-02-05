@@ -83,8 +83,11 @@ export const authAPI = {
     getMe: () =>
         api.get('/auth/me'),
 
-    updateProfile: (data: { name?: string }) =>
+    updateProfile: (data: { name?: string; email?: string; phoneNumber?: string }) =>
         api.put('/auth/profile', data),
+
+    changePassword: (data: { currentPassword: string; newPassword: string }) =>
+        api.put('/auth/change-password', data),
 };
 
 // Canteen API

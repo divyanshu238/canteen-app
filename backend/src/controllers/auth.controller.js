@@ -411,11 +411,39 @@ export const getMe = async (req, res, next) => {
  */
 export const updateProfile = async (req, res, next) => {
     try {
-        const { name } = req.body;
+        const { name, email, phoneNumber } = req.body;
 
         const updates = {};
         if (name && name.trim().length >= 2) {
             updates.name = name.trim();
+        }
+
+        // Allow updating email if provided and valid
+        if (email && email.includes('@')) {
+            const normalizedEmail = email.toLowerCase().trim();
+            // Check if email is taken by another user
+            if (normalizedEmail !== req.user.email) {
+                const existing = await User.findOne({ email: normalizedEmail });
+                if (existing) {
+                    return res.status(409).json({
+                        success: false,
+                        error: 'Email is already in use'
+                    });
+                }
+                updates.email = normalizedEmail;
+            }
+        }
+
+        // Allow updating phone if provided and valid
+        if (phoneNumber) {
+            const cleanPhone = phoneNumber.replace(/\D/g, '');
+            // simple validation
+            if (cleanPhone.length >= 10) {
+                // Format strictly if needed, for now trusting the input/schema validation slightly or doing basic format
+                // Re-using register logic for format would be best but let's keep it simple as per schema
+                const formatted = cleanPhone.length === 10 ? `+91${cleanPhone}` : `+${cleanPhone}`;
+                updates.phoneNumber = formatted;
+            }
         }
 
         if (Object.keys(updates).length === 0) {
@@ -440,6 +468,56 @@ export const updateProfile = async (req, res, next) => {
     }
 };
 
+/**
+ * Change password
+ * PUT /api/auth/change-password
+ */
+export const changePassword = async (req, res, next) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                error: 'Current and new passwords are required'
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                error: 'New password must be at least 6 characters'
+            });
+        }
+
+        // Get user with password select
+        const user = await User.findById(req.user._id).select('+password');
+
+        // Verify current password
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                error: 'Incorrect current password'
+            });
+        }
+
+        // Hash new password
+        user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+        await user.save();
+
+        // Optional: Revoke all refresh tokens (logout from other devices)
+        // await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
+
+        res.json({
+            success: true,
+            message: 'Password updated successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // Legacy export for compatibility
 export const signup = register;
 
@@ -451,6 +529,7 @@ export default {
     logout,
     getMe,
     updateProfile,
+    changePassword,
     generateTokens,
     formatUserResponse
 };

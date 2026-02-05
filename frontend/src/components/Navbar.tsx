@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../store';
 import type { RootState } from '../store';
-import { ShoppingBag, Search, MapPin, User, LogOut, ChevronDown, LayoutDashboard, Shield, X, Loader2 } from 'lucide-react';
+import { ShoppingBag, Search, MapPin, User, LogOut, ChevronDown, LayoutDashboard, Shield, X, Loader2, Settings, Lock } from 'lucide-react';
 import { searchAPI } from '../api';
 
 // Debounce hook
@@ -41,6 +41,10 @@ export const Navbar = () => {
     const searchInputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
 
+    // User menu state
+    const [showUserMenu, setShowUserMenu] = useState(false);
+    const userMenuRef = useRef<HTMLDivElement>(null);
+
     // Get initial search value from URL if on search page
     useEffect(() => {
         if (location.pathname === '/search') {
@@ -77,15 +81,23 @@ export const Navbar = () => {
             });
     }, [debouncedQuery]);
 
-    // Close suggestions when clicking outside
+    // Close menus when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            // Suggestions
             if (
                 suggestionsRef.current &&
                 !suggestionsRef.current.contains(event.target as Node) &&
                 !searchInputRef.current?.contains(event.target as Node)
             ) {
                 setShowSuggestions(false);
+            }
+            // User Menu
+            if (
+                userMenuRef.current &&
+                !userMenuRef.current.contains(event.target as Node)
+            ) {
+                setShowUserMenu(false);
             }
         };
 
@@ -96,6 +108,7 @@ export const Navbar = () => {
     const handleLogout = () => {
         dispatch(logout());
         navigate('/');
+        setShowUserMenu(false);
     };
 
     const handleSearch = useCallback((query: string) => {
@@ -266,19 +279,63 @@ export const Navbar = () => {
                                     </button>
                                 )}
 
-                                {/* User Info */}
-                                <div className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-xl">
-                                    <User size={18} className="text-orange-500" />
-                                    <span className="font-semibold text-gray-900 text-sm">{user.name}</span>
-                                </div>
 
-                                <button
-                                    onClick={handleLogout}
-                                    className="p-2.5 hover:bg-gray-50 rounded-xl transition-colors text-gray-500 hover:text-red-500"
-                                    title="Logout"
-                                >
-                                    <LogOut size={20} />
-                                </button>
+                                {/* User Dropdown */}
+                                <div className="relative" ref={userMenuRef}>
+                                    <button
+                                        onClick={() => setShowUserMenu(!showUserMenu)}
+                                        className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-xl transition-all"
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-bold border border-orange-200">
+                                            {user.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <span className="font-semibold text-gray-900 text-sm hidden sm:block">{user.name}</span>
+                                        <ChevronDown size={16} className={`text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {/* Dropdown Menu */}
+                                    {showUserMenu && (
+                                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="px-4 py-3 border-b border-gray-50">
+                                                <p className="text-sm font-bold text-gray-900">{user.name}</p>
+                                                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                                            </div>
+
+                                            <div className="py-1">
+                                                <button
+                                                    onClick={() => {
+                                                        navigate('/profile');
+                                                        setShowUserMenu(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 transition-colors"
+                                                >
+                                                    <User size={16} />
+                                                    My Profile
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        navigate('/profile'); // User can switch tab there
+                                                        setShowUserMenu(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2 transition-colors"
+                                                >
+                                                    <Lock size={16} />
+                                                    Change Password
+                                                </button>
+                                            </div>
+
+                                            <div className="border-t border-gray-50 mt-1 pt-1">
+                                                <button
+                                                    onClick={handleLogout}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-medium"
+                                                >
+                                                    <LogOut size={16} />
+                                                    Logout
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ) : (
                             <button
