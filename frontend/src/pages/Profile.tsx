@@ -98,7 +98,7 @@ export const Profile = () => {
             });
 
             // 3. Success Handling with Logout
-            setSuccessMessage(data.message || 'Password updated successfully. Logging out...');
+            setSuccessMessage('Password updated successfully. You will be logged out for security.');
 
             // Clear form
             setPasswordForm({
@@ -110,8 +110,17 @@ export const Profile = () => {
             // 4. Force Logout and Redirect
             if (data.forceLogout) {
                 setTimeout(() => {
+                    // Explicitly clear all storage
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('refreshToken');
+                    sessionStorage.clear();
+
+                    // Dispatch logout to clear Redux state
                     dispatch(logout());
-                    navigate('/login');
+
+                    // Force redirect to login
+                    navigate('/login', { replace: true });
                 }, 2000);
             }
 
