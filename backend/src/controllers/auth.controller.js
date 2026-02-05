@@ -145,15 +145,12 @@ export const register = async (req, res, next) => {
             });
         }
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
-
         // Create user
         const userData = {
             name: name.trim(),
             email: normalizedEmail,
             phoneNumber: phoneNumber,
-            password: hashedPassword,
+            password: password, // Hashing handled by pre('save') hook
             role: ['student', 'partner'].includes(role) ? role : 'student',
             isApproved: role !== 'partner' // Partners need admin approval
         };
@@ -502,8 +499,8 @@ export const changePassword = async (req, res, next) => {
             });
         }
 
-        // Hash new password
-        user.password = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+        // Update password (pre-save hook will hash this)
+        user.password = newPassword;
         await user.save();
 
         // Optional: Revoke all refresh tokens (logout from other devices)

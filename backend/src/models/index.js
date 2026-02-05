@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 // =====================
 // USER SCHEMA - EMAIL/PASSWORD AUTHENTICATION (NO FIREBASE)
@@ -72,6 +73,21 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ email: 1 });
 userSchema.index({ phoneNumber: 1 });
 userSchema.index({ role: 1, isActive: 1 });
+
+// ============================================
+// PRE-SAVE HOOK - HANDLE PASSWORD HASHING
+// ============================================
+userSchema.pre('save', async function (next) {
+    if (!this.isModified('password')) return next();
+
+    try {
+        const salt = await bcrypt.genSalt(12);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
 
 // Transform output (remove sensitive fields)
 userSchema.methods.toJSON = function () {
