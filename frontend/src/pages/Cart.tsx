@@ -177,25 +177,13 @@ export const Cart = () => {
 
     // Empty cart view
     if (items.length === 0) {
+        // Import EmptyCartState at top level in real code, but here we can just ensure it is imported.
+        // I will assume I need to add the import at the file top separately or this replacement handles the render block.
+        // Wait, I cannot add import inside the function. I'll fix imports in a 2nd step or user multi_replace.
         return (
-            <div className="min-h-screen bg-gray-50">
+            <div className="min-h-screen bg-gray-50 flex flex-col">
                 <Navbar />
-                <div className="flex flex-col items-center justify-center py-20 px-4">
-                    <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-gray-100 max-w-md">
-                        <div className="w-24 h-24 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <ShoppingBag size={40} className="text-orange-500" />
-                        </div>
-                        <h2 className="text-2xl font-black text-gray-900 mb-3">Your cart is empty</h2>
-                        <p className="text-gray-500 mb-6">Add items from your favorite canteens to get started</p>
-                        <button
-                            onClick={() => navigate('/')}
-                            className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-8 rounded-xl shadow-md hover:shadow-lg transition-all inline-flex items-center gap-2"
-                        >
-                            Explore Canteens
-                            <ArrowRight size={18} />
-                        </button>
-                    </div>
-                </div>
+                <EmptyCartState />
             </div>
         );
     }
