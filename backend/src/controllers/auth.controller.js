@@ -515,11 +515,12 @@ export const changePassword = async (req, res, next) => {
         await user.save();
 
         // Optional: Revoke all refresh tokens (logout from other devices)
-        // await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
+        await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
 
         res.json({
             success: true,
-            message: 'Password updated successfully'
+            message: 'Password updated successfully. You will be logged out for security.',
+            forceLogout: true
         });
     } catch (error) {
         console.error('❌ CHANGE PASSWORD ERROR:', error);
