@@ -33,7 +33,7 @@ export const Profile = () => {
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
-    const handleProfileSubmit = async (e: React.FormEvent) => {
+    const handleProfileSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsLoading(true);
 
@@ -65,7 +65,7 @@ export const Profile = () => {
         }
     };
 
-    const handlePasswordSubmit = async (e: React.FormEvent) => {
+    const handlePasswordSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
         // Clear previous messages
@@ -193,9 +193,27 @@ export const Profile = () => {
                                             </div>
 
                                             <div className="grid gap-6">
-                                                <InputGroup icon={<User size={18} />} label="Full Name" value={profileForm.name} onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })} />
-                                                <InputGroup icon={<Mail size={18} />} label="Email Address" value={profileForm.email} onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })} type="email" />
-                                                <InputGroup icon={<Phone size={18} />} label="Phone Number" value={profileForm.phoneNumber} onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })} type="tel" placeholder="+91" />
+                                                <InputGroup
+                                                    icon={<User size={18} />}
+                                                    label="Full Name"
+                                                    value={profileForm.name}
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileForm({ ...profileForm, name: e.target.value })}
+                                                />
+                                                <InputGroup
+                                                    icon={<Mail size={18} />}
+                                                    label="Email Address"
+                                                    value={profileForm.email}
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileForm({ ...profileForm, email: e.target.value })}
+                                                    type="email"
+                                                />
+                                                <InputGroup
+                                                    icon={<Phone size={18} />}
+                                                    label="Phone Number"
+                                                    value={profileForm.phoneNumber}
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
+                                                    type="tel"
+                                                    placeholder="+91"
+                                                />
 
                                                 <div>
                                                     <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
@@ -266,14 +284,36 @@ export const Profile = () => {
                                             </AnimatePresence>
 
                                             <div className="grid gap-6">
-                                                <InputGroup label="Current Password" type="password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} required icon={<Lock size={18} />} />
+                                                <InputGroup
+                                                    label="Current Password"
+                                                    type="password"
+                                                    value={passwordForm.currentPassword}
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                                                    required
+                                                    icon={<Lock size={18} />}
+                                                />
 
                                                 <div>
-                                                    <InputGroup label="New Password" type="password" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} required minLength={6} icon={<Lock size={18} />} />
+                                                    <InputGroup
+                                                        label="New Password"
+                                                        type="password"
+                                                        value={passwordForm.newPassword}
+                                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                                                        required
+                                                        minLength={6}
+                                                        icon={<Lock size={18} />}
+                                                    />
                                                     <p className="mt-1.5 text-xs text-gray-500 pl-1">Minimum 6 characters</p>
                                                 </div>
 
-                                                <InputGroup label="Confirm New Password" type="password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} required icon={<Lock size={18} />} />
+                                                <InputGroup
+                                                    label="Confirm New Password"
+                                                    type="password"
+                                                    value={passwordForm.confirmPassword}
+                                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                                                    required
+                                                    icon={<Lock size={18} />}
+                                                />
                                             </div>
 
                                             <div className="pt-4">
@@ -301,7 +341,14 @@ export const Profile = () => {
 };
 
 // Helper Components for Cleaner JSX
-const TabButton = ({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) => (
+interface TabButtonProps {
+    active: boolean;
+    onClick: () => void;
+    icon: React.ReactNode;
+    label: string;
+}
+
+const TabButton: React.FC<TabButtonProps> = ({ active, onClick, icon, label }) => (
     <motion.button
         onClick={onClick}
         whileHover={{ x: 4 }}
@@ -316,7 +363,12 @@ const TabButton = ({ active, onClick, icon, label }: { active: boolean; onClick:
     </motion.button>
 );
 
-const InputGroup = ({ label, icon, ...props }: any) => (
+interface InputGroupProps extends React.InputHTMLAttributes<HTMLInputElement> {
+    label: string;
+    icon: React.ReactNode;
+}
+
+const InputGroup: React.FC<InputGroupProps> = ({ label, icon, ...props }) => (
     <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
         <div className="relative group">
