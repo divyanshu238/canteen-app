@@ -38,7 +38,7 @@ const userSchema = new mongoose.Schema({
     // ============================================
     phoneNumber: {
         type: String,
-        required: [true, 'Phone number is required'],
+        required: [false, 'Phone number is required'], // Changed to false to prevent update bugs
         trim: true,
         match: [/^\+[1-9]\d{6,14}$/, 'Phone number must be in E.164 format (e.g., +919876543210)'],
         index: true
