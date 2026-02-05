@@ -61,9 +61,26 @@ export const Profile = () => {
     const handlePasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // 1. Client-side Validation
+        if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+            dispatch(showNotification({
+                message: 'All password fields are required',
+                type: 'error'
+            }));
+            return;
+        }
+
         if (passwordForm.newPassword !== passwordForm.confirmPassword) {
             dispatch(showNotification({
-                message: 'New passwords do not match',
+                message: 'New password and confirm password do not match',
+                type: 'error'
+            }));
+            return;
+        }
+
+        if (passwordForm.newPassword.length < 6) {
+            dispatch(showNotification({
+                message: 'New password must be at least 6 characters',
                 type: 'error'
             }));
             return;
@@ -72,27 +89,35 @@ export const Profile = () => {
         setIsLoading(true);
 
         try {
+            // 2. API Call
             const { data } = await authAPI.changePassword({
                 currentPassword: passwordForm.currentPassword,
                 newPassword: passwordForm.newPassword
             });
 
+            // 3. Success Handling
             if (data.success) {
                 dispatch(showNotification({
-                    message: 'Password changed successfully',
+                    message: data.message || 'Password changed successfully',
                     type: 'success'
                 }));
+
+                // Clear form
                 setPasswordForm({
                     currentPassword: '',
                     newPassword: '',
                     confirmPassword: ''
                 });
-                setActiveTab('details');
+
+                // Stay on security tab so user sees the clean state
             }
         } catch (error: any) {
+            // 4. Error Handling
+            console.error('Change password check failed:', error);
+
             const errorMessage = error.response?.data?.error ||
                 error.response?.data?.message ||
-                'Failed to change password';
+                'Failed to change password. Please try again.';
 
             dispatch(showNotification({
                 message: errorMessage,
