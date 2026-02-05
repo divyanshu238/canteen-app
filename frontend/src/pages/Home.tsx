@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { canteenAPI } from '../api';
 import { Navbar } from '../components/Navbar';
 import { CategorySection } from '../components/CategoryCard';
-import { Star, Clock, Sparkles } from 'lucide-react';
+import { HeroSection } from '../components/HeroSection';
+import { Star, Clock } from 'lucide-react';
 import { useOrderHistory } from '../hooks/useOrderHistory';
 
 interface Canteen {
@@ -43,27 +44,7 @@ export const Home = () => {
             <Navbar />
 
             {/* HERO SECTION */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-orange-50 via-amber-50 to-orange-100 border-b border-orange-100">
-                {/* Decorative elements */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-                <div className="absolute -bottom-8 left-0 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
-
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 text-center">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full text-sm font-semibold text-orange-600 mb-6 shadow-sm">
-                        <Sparkles size={16} className="animate-pulse" />
-                        Order from campus canteens
-                    </div>
-                    <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-gray-900 mb-4 tracking-tight">
-                        Hungry?
-                        <span className="block mt-2 bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent">
-                            We've got you covered
-                        </span>
-                    </h1>
-                    <p className="text-lg sm:text-xl text-gray-600 max-w-2xl mx-auto font-medium">
-                        Fast delivery from your favorite campus canteens directly to your classroom or dorm
-                    </p>
-                </div>
-            </div>
+            <HeroSection />
 
             {/* PREMIUM CATEGORY SCROLLER */}
             <CategorySection />
