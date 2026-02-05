@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { canteenAPI } from '../api';
 import { Navbar } from '../components/Navbar';
+import { CategorySection } from '../components/CategoryCard';
 import { Star, Clock, Sparkles } from 'lucide-react';
 import { useOrderHistory } from '../hooks/useOrderHistory';
 
@@ -37,17 +38,6 @@ export const Home = () => {
             });
     }, []);
 
-    const categories = [
-        { name: 'Burger', emoji: '🍔', color: 'from-yellow-400 to-orange-500' },
-        { name: 'Pizza', emoji: '🍕', color: 'from-red-400 to-pink-500' },
-        { name: 'Biryani', emoji: '🍛', color: 'from-orange-400 to-red-500' },
-        { name: 'Rolls', emoji: '🌯', color: 'from-green-400 to-teal-500' },
-        { name: 'Coffee', emoji: '☕', color: 'from-amber-600 to-orange-700' },
-        { name: 'Dessert', emoji: '🍰', color: 'from-pink-400 to-purple-500' },
-        { name: 'Noodles', emoji: '🍜', color: 'from-yellow-500 to-red-500' },
-        { name: 'Sandwich', emoji: '🥪', color: 'from-yellow-300 to-green-400' },
-    ];
-
     return (
         <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
             <Navbar />
@@ -75,26 +65,8 @@ export const Home = () => {
                 </div>
             </div>
 
-            {/* CATEGORY SCROLLER */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">What's on your mind?</h2>
-                <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                    {categories.map(cat => (
-                        <div
-                            key={cat.name}
-                            onClick={() => navigate(`/category/${cat.name.toLowerCase()}`)}
-                            className="flex-shrink-0 cursor-pointer group"
-                        >
-                            <div className={`w-32 h-32 rounded-2xl bg-gradient-to-br ${cat.color} flex items-center justify-center shadow-md hover:shadow-xl transform hover:scale-105 transition-all duration-200 mb-3`}>
-                                <span className="text-5xl filter drop-shadow-lg">{cat.emoji}</span>
-                            </div>
-                            <p className="text-center font-bold text-gray-700 group-hover:text-orange-600 transition-colors">
-                                {cat.name}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </div>
+            {/* PREMIUM CATEGORY SCROLLER */}
+            <CategorySection />
 
             {/* TOP CANTEENS SECTION */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20">
