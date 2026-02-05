@@ -7,6 +7,7 @@ import { orderAPI } from '../api';
 import config from '../config';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Trash2, Plus, Minus, ArrowRight, CreditCard, Shield, Loader2 } from 'lucide-react';
+import { EmptyCartState } from '../components/EmptyCartState';
 
 // Declare Razorpay on window
 declare global {
@@ -177,9 +178,6 @@ export const Cart = () => {
 
     // Empty cart view
     if (items.length === 0) {
-        // Import EmptyCartState at top level in real code, but here we can just ensure it is imported.
-        // I will assume I need to add the import at the file top separately or this replacement handles the render block.
-        // Wait, I cannot add import inside the function. I'll fix imports in a 2nd step or user multi_replace.
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col">
                 <Navbar />
