@@ -259,7 +259,8 @@ export const MyOrders = () => {
                     canteenName={ratingOrder.canteenId.name}
                     canteenImage={ratingOrder.canteenId.image}
                     onSuccess={() => {
-                        setOrders(prev => prev.map(o => o._id === ratingOrder._id ? { ...o, isReviewed: true } : o));
+                        fetchOrders();
+                        setRatingOrder(null);
                     }}
                 />
             )}
