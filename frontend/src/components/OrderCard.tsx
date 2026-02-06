@@ -4,6 +4,9 @@ import { ArrowRight, Box, Check, Clock, RotateCcw, Truck, Utensils, XCircle } fr
 import { useNavigate } from 'react-router-dom';
 import { cardVariants } from '../utils/motion';
 
+import { RatingBadge } from './RatingBadge';
+import { Star } from 'lucide-react';
+
 interface OrderItem {
     itemId: string;
     name: string;
@@ -18,6 +21,8 @@ interface Order {
         _id: string;
         name: string;
         image?: string;
+        rating?: number;
+        totalRatings?: number;
     };
     items: OrderItem[];
     totalAmount: number;
@@ -25,11 +30,14 @@ interface Order {
     paymentStatus: string;
     createdAt: string;
     itemTotal: number;
+    isReviewed?: boolean;
+    rating?: number;
 }
 
 interface OrderCardProps {
     order: Order;
     onReorder: (order: Order) => void;
+    onRate?: (order: Order) => void;
 }
 
 const getStatusConfig = (status: string) => {
@@ -51,7 +59,7 @@ const getStatusConfig = (status: string) => {
     }
 };
 
-export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder }) => {
+export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder, onRate }) => {
     const navigate = useNavigate();
     const config = getStatusConfig(order.status);
     const StatusIcon = config.icon;
@@ -86,7 +94,12 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder }) => {
                         )}
                     </div>
                     <div>
-                        <h3 className="font-bold text-gray-900 leading-tight">{order.canteenId.name}</h3>
+                        <h3 className="font-bold text-gray-900 leading-tight flex items-center gap-2">
+                            {order.canteenId.name}
+                            {order.canteenId.rating && (
+                                <RatingBadge rating={order.canteenId.rating} count={order.canteenId.totalRatings} variant="minimal" className="scale-90 origin-left opacity-70" />
+                            )}
+                        </h3>
                         <p className="text-xs text-gray-500 font-medium">{order.orderId} • {date}</p>
                     </div>
                 </div>
@@ -112,7 +125,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder }) => {
                 )}
             </div>
 
-            {/* Footer: Total & Actions */}
+            {/* Footer: User Rating or Actions */}
             <div className="flex items-center justify-between pt-4 border-t border-gray-50">
                 <div className="flex flex-col">
                     <span className="text-[10px] text-gray-400 font-bold uppercase">Total Bill</span>
@@ -120,6 +133,35 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder }) => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    {/* Rating Logic */}
+                    {order.status === 'delivered' && (
+                        <>
+                            {order.isReviewed ? (
+                                <div className="flex flex-col items-end">
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">You Rated</span>
+                                    <div className="flex items-center gap-1 text-yellow-500 font-bold text-sm">
+                                        <span>{order.rating}</span>
+                                        <Star size={12} fill="currentColor" />
+                                    </div>
+                                </div>
+                            ) : (
+                                onRate && (
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onRate(order);
+                                        }}
+                                        className="text-xs font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl transition-colors"
+                                    >
+                                        Rate Order
+                                    </motion.button>
+                                )
+                            )}
+                        </>
+                    )}
+
                     <motion.button
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}

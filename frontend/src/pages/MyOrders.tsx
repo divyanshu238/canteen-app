@@ -221,6 +221,7 @@ export const MyOrders = () => {
                                             key={order._id}
                                             order={order}
                                             onReorder={handleReorder}
+                                            onRate={(order) => setRatingOrder(order)}
                                         />
                                     ))}
                                 </AnimatePresence>

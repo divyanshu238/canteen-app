@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Clock, Heart } from 'lucide-react';
 import { fadeInUp, cardHover } from '../utils/motion';
+import { RatingBadge } from './RatingBadge';
+
 interface Canteen {
     _id: string;
     name: string;
     image: string;
     rating: number;
+    totalRatings?: number;
     tags: string[];
     priceRange: string;
     preparationTime?: string;
@@ -69,10 +72,11 @@ export const CanteenCard = ({ canteen, onClick }: CanteenCardProps) => {
                     <h3 className="font-bold text-lg text-gray-900 line-clamp-1 group-hover:text-orange-600 transition-colors">
                         {canteen.name}
                     </h3>
-                    <div className="flex items-center gap-1 bg-green-100 text-green-700 px-1.5 py-0.5 rounded-md">
-                        <span className="text-xs font-bold">{canteen.rating}</span>
-                        <Star size={10} fill="currentColor" />
-                    </div>
+                    <RatingBadge
+                        rating={canteen.rating}
+                        count={canteen.totalRatings}
+                        variant="card"
+                    />
                 </div>
 
                 <div className="flex items-center gap-2 mb-3 text-sm text-gray-500">

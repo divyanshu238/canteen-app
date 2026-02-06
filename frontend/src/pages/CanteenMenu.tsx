@@ -11,13 +11,16 @@ import { Star, Clock, Search, ChevronLeft, MapPin } from 'lucide-react';
 import { useOrderHistory } from '../hooks/useOrderHistory';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { pageVariants, staggerContainer } from '../utils/motion';
+import { RatingBadge } from '../components/RatingBadge';
 
 interface Canteen {
     _id: string;
     name: string;
     image: string;
     rating: number;
+    totalRatings?: number;
     tags: string[];
+
     priceRange: string;
     preparationTime?: string;
     description?: string;
@@ -193,16 +196,16 @@ export const CanteenMenu = () => {
                             transition={{ delay: 0.3 }}
                             className="flex flex-wrap items-center gap-4 text-sm sm:text-base font-medium text-white/90"
                         >
-                            <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-lg flex items-center gap-1.5 border border-white/10">
-                                <Star size={16} className="text-yellow-400" fill="currentColor" />
-                                <span className="font-bold text-white">{canteen.rating}</span>
-                                <span className="text-white/60 text-xs">(500+)</span>
-                            </span>
-                            <span className="flex items-center gap-1.5">
+                            <RatingBadge
+                                rating={canteen.rating}
+                                count={canteen.totalRatings}
+                                variant="menu"
+                            />
+                            <span className="flex items-center gap-1.5 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 h-fit">
                                 <Clock size={16} />
                                 {canteen.preparationTime || '20-30 min'}
                             </span>
-                            <span className="flex items-center gap-1.5">
+                            <span className="flex items-center gap-1.5 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 h-fit">
                                 <MapPin size={16} />
                                 {canteen.location || 'Campus Center'}
                             </span>
@@ -250,8 +253,8 @@ export const CanteenMenu = () => {
                                             key={cat}
                                             onClick={() => setActiveCategory(cat)}
                                             className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden group ${activeCategory === cat
-                                                    ? 'text-orange-600 bg-orange-50'
-                                                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                                ? 'text-orange-600 bg-orange-50'
+                                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                                                 }`}
                                         >
                                             <span className="relative z-10 flex justify-between items-center">
@@ -285,8 +288,8 @@ export const CanteenMenu = () => {
                                         key={cat}
                                         onClick={() => setActiveCategory(cat)}
                                         className={`px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all border ${activeCategory === cat
-                                                ? 'bg-orange-600 text-white border-orange-600 shadow-lg shadow-orange-200'
-                                                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                                            ? 'bg-orange-600 text-white border-orange-600 shadow-lg shadow-orange-200'
+                                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                                             }`}
                                     >
                                         {cat}

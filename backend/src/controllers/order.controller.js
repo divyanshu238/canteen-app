@@ -385,7 +385,7 @@ export const getOrder = async (req, res, next) => {
     try {
         const order = await Order.findById(req.params.id)
             .populate('userId', 'name email phone')
-            .populate('canteenId', 'name image');
+            .populate('canteenId', 'name image rating totalRatings')
 
         if (!order) {
             return res.status(404).json({
@@ -427,7 +427,7 @@ export const getMyOrders = async (req, res, next) => {
         if (status) query.status = status;
 
         const orders = await Order.find(query)
-            .populate('canteenId', 'name image')
+            .populate('canteenId', 'name image rating totalRatings')
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(parseInt(limit));
