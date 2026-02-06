@@ -72,11 +72,16 @@ export const CanteenCard = ({ canteen, onClick }: CanteenCardProps) => {
                     <h3 className="font-bold text-lg text-gray-900 line-clamp-1 group-hover:text-orange-600 transition-colors">
                         {canteen.name}
                     </h3>
-                    <RatingBadge
-                        rating={canteen.rating}
-                        count={canteen.totalRatings}
-                        variant="card"
-                    />
+                    <div className="flex items-center gap-1">
+                        <RatingBadge
+                            rating={canteen.rating}
+                            count={canteen.totalRatings}
+                            variant="card"
+                        />
+                        {canteen.totalRatings && canteen.totalRatings > 0 && (
+                            <span className="text-xs font-medium text-gray-400">({canteen.totalRatings})</span>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-2 mb-3 text-sm text-gray-500">
