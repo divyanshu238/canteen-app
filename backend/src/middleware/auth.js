@@ -30,12 +30,28 @@ export const authenticate = async (req, res, next) => {
             });
         }
 
+
         // Check if user is active
         if (!user.isActive) {
             return res.status(401).json({
                 success: false,
                 error: 'Account is deactivated.'
             });
+        }
+
+        // Check for forced logout (invalidate tokens issued before forceLogoutBefore)
+        if (user.forceLogoutBefore) {
+            // JWT iat is in seconds, Date is in ms
+            const tokenIssuedAt = decoded.iat * 1000;
+            const logoutTime = new Date(user.forceLogoutBefore).getTime();
+
+            if (logoutTime > tokenIssuedAt) {
+                return res.status(401).json({
+                    success: false,
+                    error: 'Session expired. Please login again.',
+                    code: 'SESSION_INVALIDATED'
+                });
+            }
         }
 
         // Attach user to request

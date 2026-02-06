@@ -174,6 +174,12 @@ async function bootstrapApplication() {
         await connectDB();
         console.log('[BOOT] MongoDB connected');
 
+        // --- Initialize Audit Logger ---
+        const { initializeAuditLogger } = await import('./utils/auditLogger.js');
+        const { AuditLog } = await import('./models/index.js');
+        initializeAuditLogger(AuditLog);
+        console.log('[BOOT] Audit Logger initialized');
+
         // --- Firebase REMOVED ---
         // Classic auth is now used.
         console.log('[BOOT] Auth system: Email/Password (Classic)');
