@@ -88,9 +88,9 @@ ReactDOM.createRoot(rootElement).render(
                                 </ProtectedRoute>
                             } />
 
-                            {/* Admin Routes - Shared for Admin & Super Admin */}
+                            {/* Admin Routes - Admin = God Mode */}
                             <Route path="/admin" element={
-                                <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
+                                <ProtectedRoute allowedRoles={['admin']}>
                                     <AdminDashboard />
                                 </ProtectedRoute>
                             } />

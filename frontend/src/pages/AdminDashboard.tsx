@@ -68,7 +68,7 @@ export const AdminDashboard = () => {
         fetchData();
     }, []);
 
-    const isSuperAdmin = user?.role === 'superadmin';
+    const isAdmin = user?.role === 'admin';
 
     if (loading) {
         return (
@@ -108,7 +108,7 @@ export const AdminDashboard = () => {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                             Admin Dashboard
-                            {isSuperAdmin && (
+                            {isAdmin && (
                                 <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold uppercase tracking-wider rounded-full border border-purple-200 flex items-center gap-1">
                                     <Shield size={12} fill="currentColor" /> Super Admin
                                 </span>
@@ -238,7 +238,7 @@ export const AdminDashboard = () => {
                 {/* 3. SUPER ADMIN CONTROLS SECTION */}
                 {/* ================================================================================== */}
 
-                {isSuperAdmin && (
+                {isAdmin && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
