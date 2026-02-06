@@ -12,6 +12,8 @@ import { useOrderHistory } from '../hooks/useOrderHistory';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { pageVariants, staggerContainer } from '../utils/motion';
 import { RatingBadge } from '../components/RatingBadge';
+import { RatingBreakdown } from '../components/RatingBreakdown';
+import { TopRatedBadge } from '../components/TopRatedBadge';
 
 interface Canteen {
     _id: string;
@@ -20,6 +22,14 @@ interface Canteen {
     rating: number;
     totalRatings?: number;
     tags: string[];
+    isTopRated?: boolean;
+    ratingBreakdown?: {
+        5: number;
+        4: number;
+        3: number;
+        2: number;
+        1: number;
+    };
 
     priceRange: string;
     preparationTime?: string;
@@ -201,6 +211,7 @@ export const CanteenMenu = () => {
                                 count={canteen.totalRatings}
                                 variant="menu"
                             />
+                            {canteen.isTopRated && <TopRatedBadge />}
                             <span className="flex items-center gap-1.5 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 h-fit">
                                 <Clock size={16} />
                                 {canteen.preparationTime || '20-30 min'}
@@ -224,7 +235,7 @@ export const CanteenMenu = () => {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
                 <div className="flex flex-col lg:flex-row gap-8">
-                    {/* Left Sidebar: Categories & Search */}
+                    {/* Sidebar: Search & Ratings & Categories */}
                     <div className="lg:w-64 flex-shrink-0 space-y-6">
                         {/* Search Box */}
                         <div className="relative group">
@@ -240,6 +251,27 @@ export const CanteenMenu = () => {
                                 className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all shadow-sm font-medium"
                             />
                         </div>
+
+                        {/* Ratings Breakdown (Desktop) */}
+                        {canteen.ratingBreakdown && (
+                            <div className="hidden lg:block bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                                    Ratings
+                                </h3>
+                                <div className="flex items-baseline gap-2 mb-2">
+                                    <span className="text-3xl font-black text-gray-900">{canteen.rating.toFixed(1)}</span>
+                                    <div className="flex flex-col">
+                                        <div className="flex text-yellow-500 text-xs">
+                                            {[...Array(5)].map((_, i) => (
+                                                <Star key={i} size={12} fill={i < Math.round(canteen.rating) ? "currentColor" : "none"} className={i < Math.round(canteen.rating) ? "" : "text-gray-300"} />
+                                            ))}
+                                        </div>
+                                        <span className="text-[10px] text-gray-400 font-medium">{canteen.totalRatings} ratings</span>
+                                    </div>
+                                </div>
+                                <RatingBreakdown breakdown={canteen.ratingBreakdown} totalRatings={canteen.totalRatings || 0} />
+                            </div>
+                        )}
 
                         {/* Categories Desktop */}
                         {!searchQuery && categories.length > 0 && (

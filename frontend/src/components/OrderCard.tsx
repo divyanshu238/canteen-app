@@ -26,12 +26,14 @@ interface Order {
     };
     items: OrderItem[];
     totalAmount: number;
-    status: 'pending' | 'placed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled';
+    status: 'pending' | 'placed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
     paymentStatus: string;
     createdAt: string;
     itemTotal: number;
     isReviewed?: boolean;
     rating?: number;
+    review?: string;
+    reviewCreatedAt?: string;
 }
 
 interface OrderCardProps {
@@ -43,6 +45,7 @@ interface OrderCardProps {
 const getStatusConfig = (status: string) => {
     switch (status) {
         case 'delivered':
+        case 'completed': // Support both
             return { color: 'bg-green-100 text-green-700', icon: Check, label: 'Delivered' };
         case 'cancelled':
             return { color: 'bg-red-100 text-red-700', icon: XCircle, label: 'Cancelled' };
@@ -66,6 +69,16 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder, onRate }
     const date = new Date(order.createdAt).toLocaleDateString(undefined, {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
+
+    // Edit Window Logic
+    const getEditStatus = () => {
+        if (!order.isReviewed || !order.reviewCreatedAt) return { editable: false };
+        const diff = Date.now() - new Date(order.reviewCreatedAt).getTime();
+        const minutesLeft = 15 - Math.floor(diff / 60000);
+        return { editable: minutesLeft > 0, minutesLeft };
+    };
+
+    const { editable, minutesLeft } = getEditStatus();
 
     const handleCardClick = () => {
         navigate(`/order/${order._id}`);
@@ -134,15 +147,27 @@ export const OrderCard: React.FC<OrderCardProps> = ({ order, onReorder, onRate }
 
                 <div className="flex items-center gap-3">
                     {/* Rating Logic */}
-                    {order.status === 'delivered' && (
+                    {(order.status === 'delivered' || order.status === 'completed') && (
                         <>
                             {order.isReviewed ? (
                                 <div className="flex flex-col items-end">
-                                    <span className="text-[10px] text-gray-400 font-bold uppercase">You Rated</span>
                                     <div className="flex items-center gap-1 text-yellow-500 font-bold text-sm">
                                         <span>{order.rating}</span>
                                         <Star size={12} fill="currentColor" />
                                     </div>
+                                    {editable ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onRate && onRate(order);
+                                            }}
+                                            className="text-[10px] font-bold text-orange-600 hover:underline mt-0.5"
+                                        >
+                                            Edit ({minutesLeft}m left)
+                                        </button>
+                                    ) : (
+                                        <span className="text-[10px] text-gray-400 font-medium">Rated</span>
+                                    )}
                                 </div>
                             ) : (
                                 onRate && (

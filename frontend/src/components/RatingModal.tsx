@@ -10,12 +10,16 @@ interface RatingModalProps {
     orderId: string;
     canteenName?: string;
     canteenImage?: string;
+    initialData?: {
+        rating: number;
+        comment: string;
+    };
     onSuccess?: () => void;
 }
 
-export const RatingModal = ({ isOpen, onClose, orderId, canteenName, canteenImage, onSuccess }: RatingModalProps) => {
-    const [rating, setRating] = useState(0);
-    const [comment, setComment] = useState('');
+export const RatingModal = ({ isOpen, onClose, orderId, canteenName, canteenImage, initialData, onSuccess }: RatingModalProps) => {
+    const [rating, setRating] = useState(initialData?.rating || 0);
+    const [comment, setComment] = useState(initialData?.comment || '');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [error, setError] = useState('');
@@ -28,7 +32,16 @@ export const RatingModal = ({ isOpen, onClose, orderId, canteenName, canteenImag
         setError('');
 
         try {
-            await reviewAPI.create({ orderId, rating, comment });
+            if (initialData) {
+                // Edit: Get review ID first (cleaner than passing it around)
+                const res = await reviewAPI.getByOrder(orderId);
+                const reviewId = res.data.data._id;
+                await reviewAPI.update(reviewId, { rating, comment });
+            } else {
+                // Create
+                await reviewAPI.create({ orderId, rating, comment });
+            }
+
             setIsSuccess(true);
             setTimeout(() => {
                 onSuccess?.();
@@ -118,8 +131,8 @@ export const RatingModal = ({ isOpen, onClose, orderId, canteenName, canteenImag
                                         onClick={handleSubmit}
                                         disabled={rating === 0 || isSubmitting}
                                         className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all mt-4 ${rating > 0
-                                                ? 'bg-gray-900 text-white shadow-lg shadow-gray-200 hover:scale-[1.02]'
-                                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                            ? 'bg-gray-900 text-white shadow-lg shadow-gray-200 hover:scale-[1.02]'
+                                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                             }`}
                                     >
                                         {isSubmitting ? <Loader2 className="animate-spin" /> : 'Submit Review'}

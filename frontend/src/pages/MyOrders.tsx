@@ -24,12 +24,14 @@ interface Order {
     };
     items: any[];
     totalAmount: number;
-    status: 'pending' | 'placed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled';
+    status: 'pending' | 'placed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'completed' | 'cancelled';
     paymentStatus: string;
     createdAt: string;
     itemTotal: number;
     isReviewed?: boolean;
     rating?: number;
+    review?: string;
+    reviewCreatedAt?: string;
 }
 
 const OrderSkeleton = () => (
@@ -258,6 +260,11 @@ export const MyOrders = () => {
                     orderId={ratingOrder._id}
                     canteenName={ratingOrder.canteenId.name}
                     canteenImage={ratingOrder.canteenId.image}
+                    initialData={
+                        (ratingOrder.isReviewed && ratingOrder.rating)
+                            ? { rating: ratingOrder.rating, comment: ratingOrder.review || '' }
+                            : undefined
+                    }
                     onSuccess={() => {
                         fetchOrders();
                         setRatingOrder(null);

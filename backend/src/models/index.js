@@ -168,6 +168,11 @@ const canteenSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    ratingBreakdown: {
+        type: Map,
+        of: Number,
+        default: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
+    },
     ownerId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -177,6 +182,11 @@ const canteenSchema = new mongoose.Schema({
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true }
+});
+
+// Virtual for Top Rated Badge
+canteenSchema.virtual('isTopRated').get(function () {
+    return this.rating >= 4.3 && this.totalRatings >= 10;
 });
 
 // Indexes
@@ -375,6 +385,9 @@ const orderSchema = new mongoose.Schema({
     review: {
         type: String,
         maxlength: 500
+    },
+    reviewCreatedAt: {
+        type: Date
     }
 }, {
     timestamps: true

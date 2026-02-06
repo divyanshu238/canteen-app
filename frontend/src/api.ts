@@ -238,7 +238,10 @@ export const reviewAPI = {
         api.post('/reviews', data),
 
     getByOrder: (orderId: string) =>
-        api.get(`/reviews/order/${orderId}`)
+        api.get(`/reviews/order/${orderId}`),
+
+    update: (reviewId: string, data: { rating: number; comment?: string }) =>
+        api.put(`/reviews/${reviewId}`, data),
 };
 
 export default api;

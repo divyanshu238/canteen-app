@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth.js';
 const router = Router();
 
 router.post('/', authenticate, reviewController.createReview);
+router.put('/:reviewId', authenticate, reviewController.updateReview);
 router.get('/order/:orderId', authenticate, reviewController.getReviewByOrder);
 
 export default router;
