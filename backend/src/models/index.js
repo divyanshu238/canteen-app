@@ -362,6 +362,19 @@ const orderSchema = new mongoose.Schema({
     },
     estimatedDeliveryTime: {
         type: Date
+    },
+    isReviewed: {
+        type: Boolean,
+        default: false
+    },
+    rating: {
+        type: Number,
+        min: 1,
+        max: 5
+    },
+    review: {
+        type: String,
+        maxlength: 500
     }
 }, {
     timestamps: true
@@ -375,6 +388,47 @@ orderSchema.index({ orderId: 1 });
 orderSchema.index({ status: 1, paymentStatus: 1 });
 
 export const Order = mongoose.model('Order', orderSchema);
+
+// =====================
+// REVIEW SCHEMA
+// =====================
+const reviewSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    canteenId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Canteen',
+        required: true
+    },
+    orderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Order',
+        required: true,
+        unique: true
+    },
+    rating: {
+        type: Number,
+        required: true,
+        min: 1,
+        max: 5
+    },
+    comment: {
+        type: String,
+        maxlength: 500,
+        trim: true
+    }
+}, {
+    timestamps: true
+});
+
+reviewSchema.index({ orderId: 1 }, { unique: true });
+reviewSchema.index({ canteenId: 1, rating: -1 });
+reviewSchema.index({ userId: 1 });
+
+export const Review = mongoose.model('Review', reviewSchema);
 
 // =====================
 // REFRESH TOKEN SCHEMA
@@ -412,5 +466,6 @@ export default {
     Canteen,
     MenuItem,
     Order,
+    Review,
     RefreshToken
 };

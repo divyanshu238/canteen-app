@@ -232,4 +232,13 @@ export const adminAPI = {
         api.post('/admin/setup', data),
 };
 
+// Review API
+export const reviewAPI = {
+    create: (data: { orderId: string; rating: number; comment?: string }) =>
+        api.post('/reviews', data),
+
+    getByOrder: (orderId: string) =>
+        api.get(`/reviews/order/${orderId}`)
+};
+
 export default api;

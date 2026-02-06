@@ -6,6 +6,8 @@ import { orderAPI } from '../api';
 import { addToCart, updateQuantity } from '../store';
 import { Navbar } from '../components/Navbar';
 import { OrderCard } from '../components/OrderCard';
+import { RatingModal } from '../components/RatingModal';
+import { StarRating } from '../components/StarRating';
 import { staggerContainer, pageVariants } from '../utils/motion';
 import { useOrderPolling } from '../hooks/useOrderPolling';
 import { Search, ShoppingBag } from 'lucide-react';
@@ -26,6 +28,8 @@ interface Order {
     paymentStatus: string;
     createdAt: string;
     itemTotal: number;
+    isReviewed?: boolean;
+    rating?: number;
 }
 
 const OrderSkeleton = () => (
@@ -60,6 +64,7 @@ export const MyOrders = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'ongoing' | 'history'>('ongoing');
     const [searchTerm, setSearchTerm] = useState('');
+    const [ratingOrder, setRatingOrder] = useState<Order | null>(null);
 
     // Real-time status updates
     useOrderPolling(orders, (updated) => {
@@ -244,6 +249,19 @@ export const MyOrders = () => {
                     </div>
                 </div>
             </div>
-        </motion.div>
+            {/* Rating Modal */}
+            {ratingOrder && (
+                <RatingModal
+                    isOpen={!!ratingOrder}
+                    onClose={() => setRatingOrder(null)}
+                    orderId={ratingOrder._id}
+                    canteenName={ratingOrder.canteenId.name}
+                    canteenImage={ratingOrder.canteenId.image}
+                    onSuccess={() => {
+                        setOrders(prev => prev.map(o => o._id === ratingOrder._id ? { ...o, isReviewed: true } : o));
+                    }}
+                />
+            )}
+        </motion.div >
     );
 };

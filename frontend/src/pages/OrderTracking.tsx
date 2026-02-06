@@ -15,6 +15,8 @@ import {
     pageVariants, staggerContainer, fadeInUp, cardHover,
     pulse, buttonClick
 } from '../utils/motion';
+import { RatingModal } from '../components/RatingModal';
+import { Star } from 'lucide-react';
 
 interface OrderItem {
     itemId: string;
@@ -35,6 +37,8 @@ interface Order {
     paymentStatus: string;
     createdAt: string;
     canteenId?: { name: string; image: string; location?: string };
+    isReviewed?: boolean;
+    rating?: number;
 }
 
 const steps = [
@@ -52,11 +56,14 @@ export const OrderTracking = () => {
     const [order, setOrder] = useState<Order | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [showRating, setShowRating] = useState(false);
     const socket = useSocket();
 
     // Real-time Polling
     useOrderPolling(order, (updated) => {
         setOrder(prev => prev ? { ...prev, ...updated } : null);
+        // If status changes to delivered, show rating modal automatically? 
+        // No, show CTA. But if it changes LIVE, maybe show toast?
     });
 
     useEffect(() => {
@@ -339,6 +346,42 @@ export const OrderTracking = () => {
                     </motion.div>
                 </motion.div>
             </div>
+
+            {/* Rating CTA */}
+            <AnimatePresence>
+                {order.status === 'delivered' && !order.isReviewed && (
+                    <motion.div
+                        initial={{ y: 100, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 100, opacity: 0 }}
+                        className="fixed bottom-0 left-0 right-0 p-4 z-40 flex justify-center pb-8"
+                    >
+                        <motion.button
+                            onClick={() => setShowRating(true)}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="bg-gray-900 text-white px-8 py-4 rounded-full shadow-2xl shadow-gray-900/40 flex items-center gap-3 font-bold text-lg border border-gray-800"
+                        >
+                            <Star className="fill-yellow-400 text-yellow-400" />
+                            Rate Your Order
+                        </motion.button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Rating Modal */}
+            {order && (
+                <RatingModal
+                    isOpen={showRating}
+                    onClose={() => setShowRating(false)}
+                    orderId={order._id}
+                    canteenName={order.canteenId?.name}
+                    canteenImage={order.canteenId?.image}
+                    onSuccess={() => {
+                        setOrder(prev => prev ? { ...prev, isReviewed: true } : null);
+                    }}
+                />
+            )}
         </motion.div>
     );
 };
