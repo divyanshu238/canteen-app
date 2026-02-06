@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useMotionTemplate, useMotionValue, useSpring } from 'framer-motion';
 import { Sparkles, TrendingUp, Clock, Star } from 'lucide-react';
+import { BurgerCategoryCard } from './BurgerCategoryCard';
 
 // --- Assets & Data ---
 // curated high-quality transparent/food images from Unsplash or specialized CDN would be ideal.
@@ -255,7 +256,11 @@ export const CategorySection = ({ className = '' }: { className?: string }) => {
                 >
                     {CATEGORIES.map((cat, index) => (
                         <div key={cat.id} className="snap-center sm:snap-start">
-                            <CategoryCard category={cat} index={index} />
+                            {cat.id === 'burger' ? (
+                                <BurgerCategoryCard />
+                            ) : (
+                                <CategoryCard category={cat} index={index} />
+                            )}
                         </div>
                     ))}
 
@@ -268,4 +273,3 @@ export const CategorySection = ({ className = '' }: { className?: string }) => {
 };
 
 export default CategoryCard;
-
