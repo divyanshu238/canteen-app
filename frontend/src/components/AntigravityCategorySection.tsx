@@ -1,28 +1,33 @@
 /**
  * AntigravityCategorySection.tsx
  * 
- * Google Antigravity-inspired interactive category cards for "What's on your mind?"
+ * Google Antigravity-inspired IDLE floating animation for category cards.
  * 
- * PHYSICS MODEL:
- * - Each card has a "home" position and current position
- * - Magnetic attraction: Cards are gently pulled toward the cursor
- * - Spring physics: Cards ease back to home position when cursor leaves
- * - Parallax depth: Cards closer to cursor move more (distance-based scaling)
- * - Ambient drift: Subtle idle floating animation when no interaction
+ * ANIMATION PHILOSOPHY:
+ * - Cards float continuously WITHOUT user interaction
+ * - Each card has unique phase, speed, and direction (no synchronized movement)
+ * - Motion feels weightless, calm, premium — like objects in low gravity
+ * - Hover pauses idle drift and applies gentle lift + scale
  * 
- * ANIMATION APPROACH:
- * - Uses requestAnimationFrame for 60fps smooth updates
- * - Spring-damper system for organic motion (no bouncing)
- * - Respects prefers-reduced-motion accessibility preference
+ * MOTION PARAMETERS (Tuned for premium feel):
+ * - Translation: ±6-10px on X/Y axes
+ * - Rotation: ±0.5° maximum (barely perceptible)
+ * - Cycle Duration: 6-12 seconds per full loop
+ * - Easing: Sinusoidal (smooth, organic, no sharp turns)
+ * 
+ * PERFORMANCE:
+ * - Uses only GPU-friendly transforms (translate3d, rotate, scale)
+ * - No layout thrashing (will-change hints)
+ * - Respects prefers-reduced-motion
  */
 
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Sparkles, TrendingUp, Clock, Star } from 'lucide-react';
 
 // ============================================
-// TYPES & INTERFACES
+// TYPES
 // ============================================
 
 interface CategoryData {
@@ -32,19 +37,6 @@ interface CategoryData {
     subtext: string;
     badge?: { text: string; icon: React.ReactNode; color: string };
     gradient: string;
-}
-
-interface CardState {
-    // Current position offset from home (px)
-    x: number;
-    y: number;
-    // Velocity for inertia
-    vx: number;
-    vy: number;
-    // Scale for depth effect
-    scale: number;
-    // Shadow elevation
-    elevation: number;
 }
 
 // ============================================
@@ -115,306 +107,271 @@ const CATEGORIES: CategoryData[] = [
 ];
 
 // ============================================
-// PHYSICS CONSTANTS
-// Tuned for "light, anti-gravity, premium" feel
+// IDLE FLOAT CONFIGURATION
+// Each card gets unique motion parameters for organic variety
 // ============================================
 
-const PHYSICS = {
-    // Spring stiffness: Lower = slower return (0.02-0.08 is organic)
-    STIFFNESS: 0.04,
-    // Damping: Higher = less bounce (0.85-0.95 for no-bounce)
-    DAMPING: 0.88,
-    // Magnetic pull strength toward cursor
-    MAGNETIC_STRENGTH: 0.15,
-    // Maximum magnetic pull radius (px)
-    MAGNETIC_RADIUS: 300,
-    // Maximum displacement from home position (px)
-    MAX_DISPLACEMENT: 25,
-    // Ambient drift amplitude (px)
-    AMBIENT_AMPLITUDE: 4,
-    // Ambient drift speed
-    AMBIENT_SPEED: 0.0008,
-    // Parallax depth multiplier (cards closer to cursor move more)
-    PARALLAX_FACTOR: 1.5,
-    // Hover scale
-    HOVER_SCALE: 1.03,
-    // Hover shadow elevation (px)
-    HOVER_ELEVATION: 20,
-};
-
-// ============================================
-// UTILITY HOOKS
-// ============================================
+interface FloatConfig {
+    // X-axis translation amplitude (px)
+    xAmplitude: number;
+    // Y-axis translation amplitude (px)
+    yAmplitude: number;
+    // Rotation amplitude (degrees)
+    rotationAmplitude: number;
+    // Full cycle duration (seconds)
+    duration: number;
+    // Phase offset (0-1, determines starting point in cycle)
+    phase: number;
+}
 
 /**
- * Hook to detect reduced motion preference
+ * Generate unique float configuration for each card
+ * Uses deterministic pseudo-random based on index for consistency across renders
  */
-const useReducedMotion = (): boolean => {
-    const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+const generateFloatConfig = (index: number): FloatConfig => {
+    // Deterministic "randomness" based on index
+    const seed = (index * 137.5) % 1; // Golden ratio-ish distribution
+    const seed2 = ((index + 3) * 89.3) % 1;
+    const seed3 = ((index + 7) * 43.7) % 1;
 
-    useEffect(() => {
-        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-        setPrefersReducedMotion(mediaQuery.matches);
-
-        const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-        mediaQuery.addEventListener('change', handler);
-        return () => mediaQuery.removeEventListener('change', handler);
-    }, []);
-
-    return prefersReducedMotion;
+    return {
+        // X amplitude: 5-9px range
+        xAmplitude: 5 + seed * 4,
+        // Y amplitude: 6-10px range
+        yAmplitude: 6 + seed2 * 4,
+        // Rotation: ±0.3-0.5 degrees
+        rotationAmplitude: 0.3 + seed3 * 0.2,
+        // Duration: 7-11 seconds (slow, organic)
+        duration: 7 + seed * 4,
+        // Phase: Each card starts at different point in cycle
+        phase: (index * 0.13) % 1,
+    };
 };
 
 // ============================================
-// ANTIGRAVITY CARD COMPONENT
+// ANTIGRAVITY FLOAT WRAPPER COMPONENT
 // ============================================
 
-interface AntigravityCardProps {
-    category: CategoryData;
+interface AntigravityFloatProps {
+    children: React.ReactNode;
     index: number;
-    mousePosition: { x: number; y: number } | null;
-    containerRef: React.RefObject<HTMLDivElement>;
-    isMouseInContainer: boolean;
+    isHovered: boolean;
     reducedMotion: boolean;
 }
 
-const AntigravityCard: React.FC<AntigravityCardProps> = ({
+/**
+ * AntigravityFloat
+ * 
+ * A wrapper component that applies continuous idle floating animation.
+ * Uses Framer Motion's `animate` with `transition.repeat: Infinity`.
+ * 
+ * MATH EXPLANATION:
+ * The animation uses keyframes at 0%, 25%, 50%, 75%, 100% of the cycle.
+ * X moves: [0, +A, 0, -A, 0] (cosine-like)
+ * Y moves: [0, +B, 0, -B, 0] (sine-like, phase shifted)
+ * This creates smooth, looping figure-8 or elliptical motion.
+ */
+const AntigravityFloat: React.FC<AntigravityFloatProps> = ({
+    children,
+    index,
+    isHovered,
+    reducedMotion,
+}) => {
+    // Generate unique config for this card
+    const config = useMemo(() => generateFloatConfig(index), [index]);
+
+    // If reduced motion is preferred, render children without animation
+    if (reducedMotion) {
+        return <div>{children}</div>;
+    }
+
+    /**
+     * KEYFRAME ANIMATION:
+     * 
+     * Position 0% (start):    x=0, y=0, rotate=0
+     * Position 25%:           x=+Ax, y=+Ay, rotate=+R
+     * Position 50% (midway):  x=0, y=0, rotate=0  
+     * Position 75%:           x=-Ax, y=-Ay, rotate=-R
+     * Position 100% (loop):   x=0, y=0, rotate=0
+     * 
+     * This creates seamless looping without any visible snap.
+     * The phase offset shifts when each card starts in the cycle.
+     */
+    const xKeyframes = [
+        0,
+        config.xAmplitude,
+        0,
+        -config.xAmplitude,
+        0
+    ];
+
+    const yKeyframes = [
+        0,
+        config.yAmplitude * 0.6,  // Asymmetric for organic feel
+        -config.yAmplitude * 0.3,
+        config.yAmplitude * 0.8,
+        0
+    ];
+
+    const rotateKeyframes = [
+        0,
+        config.rotationAmplitude,
+        0,
+        -config.rotationAmplitude,
+        0
+    ];
+
+    return (
+        <motion.div
+            animate={isHovered ? {
+                // HOVER STATE: Reduce idle motion, gentle lift
+                x: 0,
+                y: -4,
+                rotate: 0,
+                scale: 1.03,
+            } : {
+                // IDLE STATE: Continuous floating
+                x: xKeyframes,
+                y: yKeyframes,
+                rotate: rotateKeyframes,
+                scale: 1,
+            }}
+            transition={isHovered ? {
+                // Quick, smooth transition to hover state
+                duration: 0.4,
+                ease: [0.22, 1, 0.36, 1], // Custom bezier for premium feel
+            } : {
+                // Idle animation config
+                duration: config.duration,
+                ease: "easeInOut", // Sinusoidal easing for organic motion
+                repeat: Infinity,
+                repeatType: "loop",
+                // Phase offset: Start partway through the animation
+                delay: -config.phase * config.duration,
+            }}
+            style={{
+                willChange: 'transform',
+            }}
+        >
+            {children}
+        </motion.div>
+    );
+};
+
+// ============================================
+// CATEGORY CARD COMPONENT
+// ============================================
+
+interface CategoryCardProps {
+    category: CategoryData;
+    index: number;
+    reducedMotion: boolean;
+}
+
+const CategoryCard: React.FC<CategoryCardProps> = ({
     category,
     index,
-    mousePosition,
-    containerRef,
-    isMouseInContainer,
     reducedMotion,
 }) => {
     const navigate = useNavigate();
-    const cardRef = useRef<HTMLDivElement>(null);
     const [isHovered, setIsHovered] = useState(false);
 
-    // Card physics state
-    const stateRef = useRef<CardState>({
-        x: 0,
-        y: 0,
-        vx: 0,
-        vy: 0,
-        scale: 1,
-        elevation: 0,
-    });
-
-    // Animation frame ID for cleanup
-    const animationRef = useRef<number>(0);
-    // Time reference for ambient drift
-    const timeRef = useRef<number>(0);
-
-    // ----------------------------------------
-    // PHYSICS ANIMATION LOOP
-    // ----------------------------------------
-    const animate = useCallback(() => {
-        if (reducedMotion) {
-            // Skip physics, just reset position
-            if (cardRef.current) {
-                cardRef.current.style.transform = 'translate3d(0, 0, 0) scale(1)';
-            }
-            return;
-        }
-
-        const card = cardRef.current;
-        const container = containerRef.current;
-        if (!card || !container) {
-            animationRef.current = requestAnimationFrame(animate);
-            return;
-        }
-
-        const state = stateRef.current;
-        const cardRect = card.getBoundingClientRect();
-        const cardCenterX = cardRect.left + cardRect.width / 2;
-        const cardCenterY = cardRect.top + cardRect.height / 2;
-
-        // ----------------------------------------
-        // 1. MAGNETIC ATTRACTION FORCE
-        // ----------------------------------------
-        let magneticFx = 0;
-        let magneticFy = 0;
-        let distanceToMouse = Infinity;
-
-        if (mousePosition && isMouseInContainer) {
-            const dx = mousePosition.x - cardCenterX;
-            const dy = mousePosition.y - cardCenterY;
-            distanceToMouse = Math.sqrt(dx * dx + dy * dy);
-
-            if (distanceToMouse < PHYSICS.MAGNETIC_RADIUS) {
-                /**
-                 * MAGNETIC MATH:
-                 * Force decreases with distance (inverse square law, softened)
-                 * Direction: Card is pulled TOWARD cursor
-                 * 
-                 * force = strength * (1 - distance/radius)^2
-                 * This creates a smooth falloff at the edge of the magnetic field
-                 */
-                const normalizedDistance = distanceToMouse / PHYSICS.MAGNETIC_RADIUS;
-                const falloff = Math.pow(1 - normalizedDistance, 2);
-                const force = PHYSICS.MAGNETIC_STRENGTH * falloff;
-
-                // Normalize direction vector and apply force
-                magneticFx = (dx / distanceToMouse) * force * PHYSICS.PARALLAX_FACTOR;
-                magneticFy = (dy / distanceToMouse) * force * PHYSICS.PARALLAX_FACTOR;
-            }
-        }
-
-        // ----------------------------------------
-        // 2. SPRING FORCE (Return to home)
-        // ----------------------------------------
-        /**
-         * SPRING MATH:
-         * F = -k * x (Hooke's Law)
-         * Where k is stiffness and x is displacement from home (0,0)
-         * Negative sign pulls back toward origin
-         */
-        const springFx = -PHYSICS.STIFFNESS * state.x;
-        const springFy = -PHYSICS.STIFFNESS * state.y;
-
-        // ----------------------------------------
-        // 3. AMBIENT DRIFT (Subtle idle floating)
-        // ----------------------------------------
-        timeRef.current += 1;
-        const time = timeRef.current * PHYSICS.AMBIENT_SPEED;
-
-        /**
-         * AMBIENT MATH:
-         * Use sin/cos with phase offsets for organic circular motion
-         * Each card gets a unique phase based on index for variety
-         */
-        const phase = index * 0.7; // Offset each card's drift cycle
-        const ambientFx = Math.sin(time + phase) * PHYSICS.AMBIENT_AMPLITUDE * 0.01;
-        const ambientFy = Math.cos(time + phase * 1.3) * PHYSICS.AMBIENT_AMPLITUDE * 0.01;
-
-        // ----------------------------------------
-        // 4. UPDATE VELOCITY & POSITION
-        // ----------------------------------------
-        /**
-         * PHYSICS UPDATE:
-         * v' = v * damping + forces
-         * x' = x + v'
-         * 
-         * Damping < 1 causes velocity to decay (no perpetual motion)
-         * This creates the "easing back" feel without bounce
-         */
-        state.vx = state.vx * PHYSICS.DAMPING + magneticFx + springFx + ambientFx;
-        state.vy = state.vy * PHYSICS.DAMPING + magneticFy + springFy + ambientFy;
-
-        state.x += state.vx;
-        state.y += state.vy;
-
-        // Clamp displacement to prevent cards from flying away
-        state.x = Math.max(-PHYSICS.MAX_DISPLACEMENT, Math.min(PHYSICS.MAX_DISPLACEMENT, state.x));
-        state.y = Math.max(-PHYSICS.MAX_DISPLACEMENT, Math.min(PHYSICS.MAX_DISPLACEMENT, state.y));
-
-        // ----------------------------------------
-        // 5. HOVER SCALE & ELEVATION
-        // ----------------------------------------
-        const targetScale = isHovered ? PHYSICS.HOVER_SCALE : 1;
-        const targetElevation = isHovered ? PHYSICS.HOVER_ELEVATION : 0;
-
-        // Smooth interpolation for scale and elevation
-        state.scale += (targetScale - state.scale) * 0.15;
-        state.elevation += (targetElevation - state.elevation) * 0.15;
-
-        // ----------------------------------------
-        // 6. APPLY TRANSFORM (GPU-accelerated)
-        // ----------------------------------------
-        card.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
-        card.style.boxShadow = `0 ${4 + state.elevation}px ${20 + state.elevation * 2}px rgba(0, 0, 0, ${0.08 + state.elevation * 0.005})`;
-
-        // Continue animation loop
-        animationRef.current = requestAnimationFrame(animate);
-    }, [mousePosition, isMouseInContainer, index, reducedMotion, isHovered, containerRef]);
-
-    // Start/stop animation loop
-    useEffect(() => {
-        animationRef.current = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(animationRef.current);
-    }, [animate]);
-
-    // ----------------------------------------
-    // RENDER
-    // ----------------------------------------
     return (
-        <div
-            ref={cardRef}
-            onClick={() => navigate(`/category/${category.id}`)}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-            className="relative cursor-pointer flex-shrink-0 snap-center sm:snap-start will-change-transform"
-            style={{
-                // Enable GPU acceleration
-                willChange: 'transform, box-shadow',
-            }}
+        <AntigravityFloat
+            index={index}
+            isHovered={isHovered}
+            reducedMotion={reducedMotion}
         >
             <motion.div
-                initial={{ opacity: 0, y: 30, scale: 0.9 }}
+                initial={{ opacity: 0, y: 30, scale: 0.92 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={{
                     duration: 0.6,
-                    delay: index * 0.06,
+                    delay: index * 0.07,
                     ease: [0.22, 1, 0.36, 1],
                 }}
-                className="relative w-40 h-52 sm:w-48 sm:h-60 rounded-[2rem] bg-white overflow-visible"
+                onClick={() => navigate(`/category/${category.id}`)}
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                className="relative cursor-pointer flex-shrink-0 snap-center sm:snap-start"
+                style={{ willChange: 'transform, opacity' }}
             >
-                {/* 1. Gradient Background */}
-                <div className={`absolute inset-0 rounded-[2rem] bg-gradient-to-br ${category.gradient} opacity-60`} />
+                <div
+                    className={`
+                        relative w-40 h-52 sm:w-48 sm:h-60 rounded-[2rem] bg-white overflow-visible
+                        transition-shadow duration-500 ease-out
+                        ${isHovered
+                            ? 'shadow-2xl shadow-gray-300/60'
+                            : 'shadow-xl shadow-gray-200/50'
+                        }
+                    `}
+                >
+                    {/* 1. Gradient Background */}
+                    <div className={`absolute inset-0 rounded-[2rem] bg-gradient-to-br ${category.gradient} opacity-60`} />
 
-                {/* 2. Image Container */}
-                <div className="absolute inset-2 top-2 bottom-[35%] rounded-3xl overflow-hidden bg-white shadow-inner ring-1 ring-black/5">
-                    <motion.img
-                        src={category.image}
-                        alt={category.name}
-                        className="w-full h-full object-cover"
-                        animate={{
-                            scale: isHovered ? 1.12 : 1,
-                        }}
-                        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                        loading="lazy"
-                    />
-                    {/* Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                </div>
-
-                {/* 3. Badge (Appears on hover) */}
-                <AnimatePresence>
-                    {category.badge && isHovered && (
+                    {/* 2. Image Container */}
+                    <div className="absolute inset-2 top-2 bottom-[35%] rounded-3xl overflow-hidden bg-white shadow-inner ring-1 ring-black/5">
+                        <motion.img
+                            src={category.image}
+                            alt={category.name}
+                            className="w-full h-full object-cover"
+                            animate={{
+                                scale: isHovered ? 1.1 : 1,
+                            }}
+                            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                            loading="lazy"
+                        />
+                        {/* Dark overlay on hover */}
                         <motion.div
-                            initial={{ opacity: 0, y: 8, scale: 0.85 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 4, scale: 0.9 }}
-                            transition={{ duration: 0.25, ease: 'easeOut' }}
-                            className={`absolute -top-3 -right-3 px-3 py-1.5 rounded-full ${category.badge.color} text-white text-[10px] font-bold uppercase tracking-wider shadow-lg flex items-center gap-1 z-20`}
+                            className="absolute inset-0 bg-gradient-to-t from-black/15 to-transparent"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: isHovered ? 1 : 0 }}
+                            transition={{ duration: 0.3 }}
+                        />
+                    </div>
+
+                    {/* 3. Badge (Appears on hover) */}
+                    <AnimatePresence>
+                        {category.badge && isHovered && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 8, scale: 0.85 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 4, scale: 0.9 }}
+                                transition={{ duration: 0.25, ease: 'easeOut' }}
+                                className={`absolute -top-3 -right-3 px-3 py-1.5 rounded-full ${category.badge.color} text-white text-[10px] font-bold uppercase tracking-wider shadow-lg flex items-center gap-1 z-20`}
+                            >
+                                {category.badge.icon}
+                                {category.badge.text}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* 4. Text Content */}
+                    <div className="absolute bottom-0 left-0 right-0 p-5 pt-0 flex flex-col items-center justify-center h-[35%] text-center">
+                        <motion.h3
+                            className="text-lg font-black text-gray-800 leading-tight"
+                            animate={{
+                                y: isHovered ? -3 : 0,
+                                color: isHovered ? '#ea580c' : '#1f2937',
+                            }}
+                            transition={{ duration: 0.3 }}
                         >
-                            {category.badge.icon}
-                            {category.badge.text}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                            {category.name}
+                        </motion.h3>
+                        <motion.p
+                            className="text-xs font-semibold text-gray-500 mt-1"
+                            animate={{ opacity: isHovered ? 1 : 0.7 }}
+                        >
+                            {category.subtext}
+                        </motion.p>
+                    </div>
 
-                {/* 4. Text Content */}
-                <div className="absolute bottom-0 left-0 right-0 p-5 pt-0 flex flex-col items-center justify-center h-[35%] text-center">
-                    <motion.h3
-                        className="text-lg font-black text-gray-800 leading-tight"
-                        animate={{ y: isHovered ? -3 : 0, color: isHovered ? '#ea580c' : '#1f2937' }}
-                        transition={{ duration: 0.3 }}
-                    >
-                        {category.name}
-                    </motion.h3>
-                    <motion.p
-                        className="text-xs font-semibold text-gray-500 mt-1"
-                        animate={{ opacity: isHovered ? 1 : 0.7 }}
-                    >
-                        {category.subtext}
-                    </motion.p>
+                    {/* 5. Glassmorphism Highlights */}
+                    <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/70 pointer-events-none" />
+                    <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/50 to-transparent rounded-t-[2rem] pointer-events-none" />
                 </div>
-
-                {/* 5. Glassmorphism Highlights */}
-                <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/70 pointer-events-none" />
-                <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/50 to-transparent rounded-t-[2rem] pointer-events-none" />
             </motion.div>
-        </div>
+        </AntigravityFloat>
     );
 };
 
@@ -423,30 +380,8 @@ const AntigravityCard: React.FC<AntigravityCardProps> = ({
 // ============================================
 
 export const AntigravityCategorySection: React.FC<{ className?: string }> = ({ className = '' }) => {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [mousePosition, setMousePosition] = useState<{ x: number; y: number } | null>(null);
-    const [isMouseInContainer, setIsMouseInContainer] = useState(false);
-    const reducedMotion = useReducedMotion();
+    const reducedMotion = useReducedMotion() ?? false;
 
-    // ----------------------------------------
-    // MOUSE TRACKING
-    // ----------------------------------------
-    const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        setMousePosition({ x: e.clientX, y: e.clientY });
-    }, []);
-
-    const handleMouseEnter = useCallback(() => {
-        setIsMouseInContainer(true);
-    }, []);
-
-    const handleMouseLeave = useCallback(() => {
-        setIsMouseInContainer(false);
-        setMousePosition(null);
-    }, []);
-
-    // ----------------------------------------
-    // RENDER
-    // ----------------------------------------
     return (
         <section className={`py-8 ${className}`}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -474,12 +409,8 @@ export const AntigravityCategorySection: React.FC<{ className?: string }> = ({ c
                     </div>
                 </motion.div>
 
-                {/* Antigravity Cards Container */}
+                {/* Floating Cards Container */}
                 <div
-                    ref={containerRef}
-                    onMouseMove={handleMouseMove}
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
                     className="
                         flex gap-6 overflow-x-auto pb-8 -mx-4 px-4 sm:mx-0 sm:px-0
                         snap-x snap-mandatory scroll-smooth
@@ -491,13 +422,10 @@ export const AntigravityCategorySection: React.FC<{ className?: string }> = ({ c
                     }}
                 >
                     {CATEGORIES.map((category, index) => (
-                        <AntigravityCard
+                        <CategoryCard
                             key={category.id}
                             category={category}
                             index={index}
-                            mousePosition={mousePosition}
-                            containerRef={containerRef}
-                            isMouseInContainer={isMouseInContainer}
                             reducedMotion={reducedMotion}
                         />
                     ))}
@@ -508,6 +436,54 @@ export const AntigravityCategorySection: React.FC<{ className?: string }> = ({ c
             </div>
         </section>
     );
+};
+
+// ============================================
+// REUSABLE HOOK EXPORT (For use elsewhere)
+// ============================================
+
+/**
+ * useAntigravityFloat
+ * 
+ * A hook that returns Framer Motion animation props for idle floating.
+ * Can be used on any element to apply the antigravity effect.
+ * 
+ * @param index - Unique index for varied motion
+ * @param isHovered - Whether the element is currently hovered
+ * @param reducedMotion - Whether user prefers reduced motion
+ */
+export const useAntigravityFloat = (
+    index: number,
+    isHovered: boolean,
+    reducedMotion: boolean
+) => {
+    const config = useMemo(() => generateFloatConfig(index), [index]);
+
+    if (reducedMotion) {
+        return {
+            animate: {},
+            transition: {},
+        };
+    }
+
+    const xKeyframes = [0, config.xAmplitude, 0, -config.xAmplitude, 0];
+    const yKeyframes = [0, config.yAmplitude * 0.6, -config.yAmplitude * 0.3, config.yAmplitude * 0.8, 0];
+    const rotateKeyframes = [0, config.rotationAmplitude, 0, -config.rotationAmplitude, 0];
+
+    return {
+        animate: isHovered
+            ? { x: 0, y: -4, rotate: 0, scale: 1.03 }
+            : { x: xKeyframes, y: yKeyframes, rotate: rotateKeyframes, scale: 1 },
+        transition: isHovered
+            ? { duration: 0.4, ease: [0.22, 1, 0.36, 1] }
+            : {
+                duration: config.duration,
+                ease: "easeInOut",
+                repeat: Infinity,
+                repeatType: "loop" as const,
+                delay: -config.phase * config.duration,
+            },
+    };
 };
 
 export default AntigravityCategorySection;
