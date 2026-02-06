@@ -256,4 +256,122 @@ export const reviewAPI = {
         api.put(`/reviews/${reviewId}`, data),
 };
 
+// ========================
+// SUPER ADMIN API (God Mode)
+// ========================
+export const superadminAPI = {
+    // Users
+    listUsers: (params?: { role?: string; status?: string; search?: string; limit?: number; page?: number }) =>
+        api.get('/superadmin/users', { params }),
+    getUser: (id: string) =>
+        api.get(`/superadmin/users/${id}`),
+    createUser: (data: { name: string; email: string; password: string; phoneNumber?: string; role?: string }) =>
+        api.post('/superadmin/users', data),
+    updateUser: (id: string, data: any) =>
+        api.put(`/superadmin/users/${id}`, data),
+    deleteUser: (id: string, reason?: string) =>
+        api.delete(`/superadmin/users/${id}`, { data: { reason } }),
+    suspendUser: (id: string, reason?: string) =>
+        api.post(`/superadmin/users/${id}/suspend`, { reason }),
+    reactivateUser: (id: string) =>
+        api.post(`/superadmin/users/${id}/reactivate`),
+    forceLogout: (id: string, reason?: string) =>
+        api.post(`/superadmin/users/${id}/force-logout`, { reason }),
+    resetPassword: (id: string, newPassword: string) =>
+        api.post(`/superadmin/users/${id}/reset-password`, { newPassword }),
+    getUserActivity: (id: string, params?: { limit?: number; page?: number }) =>
+        api.get(`/superadmin/users/${id}/activity`, { params }),
+
+    // Canteens
+    listCanteens: (params?: { status?: string; search?: string; limit?: number; page?: number }) =>
+        api.get('/superadmin/canteens', { params }),
+    getCanteen: (id: string) =>
+        api.get(`/superadmin/canteens/${id}`),
+    createCanteen: (data: { name: string; description?: string; image?: string; ownerId: string; tags?: string[] }) =>
+        api.post('/superadmin/canteens', data),
+    updateCanteen: (id: string, data: any) =>
+        api.put(`/superadmin/canteens/${id}`, data),
+    deleteCanteen: (id: string, reason?: string) =>
+        api.delete(`/superadmin/canteens/${id}`, { data: { reason } }),
+    approveCanteen: (id: string) =>
+        api.post(`/superadmin/canteens/${id}/approve`),
+    rejectCanteen: (id: string, reason?: string) =>
+        api.post(`/superadmin/canteens/${id}/reject`, { reason }),
+    suspendCanteen: (id: string, reason?: string) =>
+        api.post(`/superadmin/canteens/${id}/suspend`, { reason }),
+    toggleCanteenOrdering: (id: string) =>
+        api.post(`/superadmin/canteens/${id}/toggle-ordering`),
+    getCanteenRevenue: (id: string) =>
+        api.get(`/superadmin/canteens/${id}/revenue`),
+
+    // Menu
+    listMenuItems: (params?: { canteenId?: string; category?: string; inStock?: string; search?: string }) =>
+        api.get('/superadmin/menu', { params }),
+    getMenuItem: (id: string) =>
+        api.get(`/superadmin/menu/${id}`),
+    createMenuItem: (data: { canteenId: string; name: string; price: number; description?: string; image?: string; category?: string; isVeg?: boolean }) =>
+        api.post('/superadmin/menu', data),
+    updateMenuItem: (id: string, data: any) =>
+        api.put(`/superadmin/menu/${id}`, data),
+    deleteMenuItem: (id: string, reason?: string) =>
+        api.delete(`/superadmin/menu/${id}`, { data: { reason } }),
+    toggleMenuItemStock: (id: string) =>
+        api.post(`/superadmin/menu/${id}/toggle-stock`),
+    bulkUpdateMenuItems: (items: Array<{ id: string; price?: number; inStock?: boolean }>) =>
+        api.post('/superadmin/menu/bulk-update', { items }),
+
+    // Orders
+    listOrders: (params?: { status?: string; paymentStatus?: string; canteenId?: string; userId?: string; date?: string; limit?: number; page?: number }) =>
+        api.get('/superadmin/orders', { params }),
+    getLiveOrders: () =>
+        api.get('/superadmin/orders/live'),
+    getOrder: (id: string) =>
+        api.get(`/superadmin/orders/${id}`),
+    overrideOrderStatus: (id: string, status: string, reason?: string) =>
+        api.put(`/superadmin/orders/${id}/status`, { status, reason }),
+    cancelOrder: (id: string, reason?: string) =>
+        api.post(`/superadmin/orders/${id}/cancel`, { reason }),
+    refundOrder: (id: string, amount?: number, reason?: string) =>
+        api.post(`/superadmin/orders/${id}/refund`, { amount, reason }),
+    overridePaymentStatus: (id: string, paymentStatus: string, reason?: string) =>
+        api.put(`/superadmin/orders/${id}/payment-status`, { paymentStatus, reason }),
+    reassignOrder: (id: string, newCanteenId: string, reason?: string) =>
+        api.post(`/superadmin/orders/${id}/reassign`, { newCanteenId, reason }),
+
+    // Reviews
+    listReviews: (params?: { canteenId?: string; userId?: string; isFlagged?: string; isLocked?: string; rating?: number; limit?: number; page?: number }) =>
+        api.get('/superadmin/reviews', { params }),
+    getReview: (id: string) =>
+        api.get(`/superadmin/reviews/${id}`),
+    editReview: (id: string, data: { rating?: number; comment?: string; reason?: string }) =>
+        api.put(`/superadmin/reviews/${id}`, data),
+    deleteReview: (id: string, reason?: string) =>
+        api.delete(`/superadmin/reviews/${id}`, { data: { reason } }),
+    toggleReviewFlag: (id: string, reason?: string) =>
+        api.post(`/superadmin/reviews/${id}/flag`, { reason }),
+    lockReview: (id: string) =>
+        api.post(`/superadmin/reviews/${id}/lock`),
+    overrideRating: (id: string, rating: number, reason?: string) =>
+        api.put(`/superadmin/reviews/${id}/rating-override`, { rating, reason }),
+
+    // Analytics
+    getOverviewAnalytics: () =>
+        api.get('/superadmin/analytics/overview'),
+
+    // Audit Logs
+    listAuditLogs: (params?: { adminId?: string; entityType?: string; action?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) =>
+        api.get('/superadmin/audit-logs', { params }),
+    getAuditLog: (id: string) =>
+        api.get(`/superadmin/audit-logs/${id}`),
+
+    // System Settings
+    getSystemSettings: () =>
+        api.get('/superadmin/settings'),
+    updateSystemSetting: (key: string, value: any, reason?: string) =>
+        api.put(`/superadmin/settings/${key}`, { value, reason }),
+    toggleMaintenanceMode: (enabled: boolean, message?: string) =>
+        api.post('/superadmin/maintenance-mode', { enabled, message }),
+};
+
 export default api;
+

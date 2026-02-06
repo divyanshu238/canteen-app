@@ -11,6 +11,7 @@ import partnerRoutes from './partner.routes.js';
 import adminRoutes from './admin.routes.js';
 import searchRoutes from './search.routes.js';
 import reviewRoutes from './review.routes.js';
+import superadminRoutes from './superadmin.routes.js';
 
 export const setupRoutes = (app) => {
     app.use('/api/auth', authRoutes);
@@ -21,8 +22,10 @@ export const setupRoutes = (app) => {
     app.use('/api/search', searchRoutes);
     app.use('/api/reviews', reviewRoutes);
 
-    // Note: /api/health is defined in index.js BEFORE rate limiting middleware
-    // to ensure it always responds with 200 for Render health checks
+    // Super Admin Control Plane - God Mode
+    app.use('/api/superadmin', superadminRoutes);
+
+    console.log('✅ Routes registered (including /api/superadmin - God Mode)');
 };
 
 export default {
@@ -33,5 +36,6 @@ export default {
     adminRoutes,
     searchRoutes,
     reviewRoutes,
+    superadminRoutes,
     setupRoutes
 };

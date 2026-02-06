@@ -62,7 +62,26 @@ const userSchema = new mongoose.Schema({
     canteenId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Canteen'
-    }
+    },
+    // ============================================
+    // SUPER ADMIN CONTROL FIELDS
+    // ============================================
+    suspendedAt: Date,
+    suspendedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    suspendReason: String,
+    lastLoginAt: Date,
+    lastLoginIp: String,
+    // Soft delete fields
+    deletedAt: Date,
+    deletedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    // Force logout - tokens issued before this time are invalid
+    forceLogoutBefore: Date
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
@@ -253,6 +272,18 @@ const menuItemSchema = new mongoose.Schema({
     totalOrders: {
         type: Number,
         default: 0
+    },
+    // ============================================
+    // SUPER ADMIN TRACKING FIELDS
+    // ============================================
+    priceHistory: [{
+        price: Number,
+        changedAt: { type: Date, default: Date.now },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }],
+    lastModifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
     }
 }, {
     timestamps: true
@@ -340,7 +371,25 @@ const orderSchema = new mongoose.Schema({
     isReviewed: {
         type: Boolean,
         default: false
-    }
+    },
+    // ============================================
+    // SUPER ADMIN OVERRIDE TRACKING
+    // ============================================
+    adminOverrides: [{
+        field: String,
+        oldValue: mongoose.Schema.Types.Mixed,
+        newValue: mongoose.Schema.Types.Mixed,
+        overriddenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        overriddenAt: { type: Date, default: Date.now },
+        reason: String
+    }],
+    refundDetails: {
+        refundedAt: Date,
+        refundedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        razorpayRefundId: String,
+        amount: Number,
+        reason: String
+    },
 }, {
     timestamps: true
 });
@@ -388,7 +437,20 @@ const reviewSchema = new mongoose.Schema({
     },
     flagReason: {
         type: String
-    }
+    },
+    // ============================================
+    // SUPER ADMIN CONTROL FIELDS
+    // ============================================
+    isLocked: { type: Boolean, default: false },
+    lockedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    lockedAt: Date,
+    adminEdits: [{
+        editedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        editedAt: { type: Date, default: Date.now },
+        previousRating: Number,
+        previousComment: String,
+        reason: String
+    }]
 }, {
     timestamps: true
 });
@@ -430,11 +492,141 @@ refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const RefreshToken = mongoose.model('RefreshToken', refreshTokenSchema);
 
+// =====================
+// AUDIT LOG SCHEMA (IMMUTABLE)
+// =====================
+const auditLogSchema = new mongoose.Schema({
+    // WHO performed the action
+    adminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true,
+        index: true
+    },
+    adminEmail: String,
+    adminName: String,
+
+    // WHAT action was performed
+    action: {
+        type: String,
+        required: true,
+        enum: [
+            // User actions
+            'USER_CREATE', 'USER_UPDATE', 'USER_DELETE', 'USER_SUSPEND',
+            'USER_REACTIVATE', 'USER_FORCE_LOGOUT', 'USER_PASSWORD_RESET',
+            // Canteen actions
+            'CANTEEN_CREATE', 'CANTEEN_UPDATE', 'CANTEEN_DELETE',
+            'CANTEEN_APPROVE', 'CANTEEN_REJECT', 'CANTEEN_SUSPEND', 'CANTEEN_TOGGLE_ORDERING',
+            // Menu actions
+            'MENU_ITEM_CREATE', 'MENU_ITEM_UPDATE', 'MENU_ITEM_DELETE',
+            'MENU_ITEM_STOCK_TOGGLE', 'MENU_BULK_UPDATE', 'MENU_PRICE_CHANGE',
+            // Order actions
+            'ORDER_STATUS_OVERRIDE', 'ORDER_CANCEL', 'ORDER_REFUND',
+            'ORDER_REASSIGN', 'ORDER_PAYMENT_OVERRIDE',
+            // Review actions
+            'REVIEW_EDIT', 'REVIEW_DELETE', 'REVIEW_FLAG_TOGGLE',
+            'REVIEW_LOCK', 'RATING_OVERRIDE',
+            // System actions
+            'FEATURE_FLAG_TOGGLE', 'MAINTENANCE_MODE_TOGGLE',
+            'SYSTEM_SETTING_CHANGE', 'ADMIN_ROLE_CHANGE'
+        ],
+        index: true
+    },
+
+    // WHAT entity was affected
+    entityType: {
+        type: String,
+        required: true,
+        enum: ['User', 'Canteen', 'MenuItem', 'Order', 'Review', 'System'],
+        index: true
+    },
+    entityId: {
+        type: mongoose.Schema.Types.ObjectId,
+        index: true
+    },
+
+    // STATE before and after (for rollback capability)
+    beforeState: mongoose.Schema.Types.Mixed,
+    afterState: mongoose.Schema.Types.Mixed,
+
+    // WHY (optional reason)
+    reason: String,
+
+    // METADATA
+    ipAddress: String,
+    userAgent: String,
+
+    // TIMESTAMP (immutable)
+    timestamp: {
+        type: Date,
+        default: Date.now,
+        immutable: true,
+        index: true
+    }
+}, {
+    timestamps: false,
+    collection: 'audit_logs'
+});
+
+// Compound indexes for efficient querying
+auditLogSchema.index({ adminId: 1, timestamp: -1 });
+auditLogSchema.index({ entityType: 1, entityId: 1, timestamp: -1 });
+auditLogSchema.index({ action: 1, timestamp: -1 });
+
+// Prevent modification once created (append-only)
+auditLogSchema.pre('findOneAndUpdate', function () {
+    throw new Error('Audit logs are immutable');
+});
+auditLogSchema.pre('updateOne', function () {
+    throw new Error('Audit logs are immutable');
+});
+auditLogSchema.pre('updateMany', function () {
+    throw new Error('Audit logs are immutable');
+});
+
+export const AuditLog = mongoose.model('AuditLog', auditLogSchema);
+
+// =====================
+// SYSTEM SETTINGS SCHEMA
+// =====================
+const systemSettingsSchema = new mongoose.Schema({
+    key: {
+        type: String,
+        required: true,
+        unique: true,
+        enum: [
+            'MAINTENANCE_MODE',
+            'NEW_USER_REGISTRATION',
+            'NEW_PARTNER_REGISTRATION',
+            'ORDERING_ENABLED',
+            'PAYMENT_ENABLED',
+            'REVIEW_SUBMISSION_ENABLED',
+            'MAX_ORDER_AMOUNT',
+            'MIN_ORDER_AMOUNT',
+            'PLATFORM_FEE_PERCENTAGE'
+        ]
+    },
+    value: mongoose.Schema.Types.Mixed,
+    description: String,
+    lastModifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    lastModifiedAt: {
+        type: Date,
+        default: Date.now
+    }
+}, { timestamps: true });
+
+export const SystemSettings = mongoose.model('SystemSettings', systemSettingsSchema);
+
 export default {
     User,
     Canteen,
     MenuItem,
     Order,
     Review,
-    RefreshToken
+    RefreshToken,
+    AuditLog,
+    SystemSettings
 };

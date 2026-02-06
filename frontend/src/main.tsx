@@ -17,6 +17,7 @@ import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { Profile } from './pages/Profile';
 import { MyOrders } from './pages/MyOrders';
+import SuperAdminDashboard from './pages/admin/SuperAdminDashboard';
 import './index.css';
 
 // Protected Route Components
@@ -91,6 +92,18 @@ ReactDOM.createRoot(rootElement).render(
                             <Route path="/admin" element={
                                 <ProtectedRoute allowedRoles={['admin']}>
                                     <AdminDashboard />
+                                </ProtectedRoute>
+                            } />
+
+                            {/* Super Admin Control Plane */}
+                            <Route path="/superadmin" element={
+                                <ProtectedRoute allowedRoles={['admin']}>
+                                    <SuperAdminDashboard />
+                                </ProtectedRoute>
+                            } />
+                            <Route path="/superadmin/*" element={
+                                <ProtectedRoute allowedRoles={['admin']}>
+                                    <SuperAdminDashboard />
                                 </ProtectedRoute>
                             } />
 
