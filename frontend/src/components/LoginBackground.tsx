@@ -1,101 +1,154 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-// Food Images (High-quality, distinct items)
-const IMAGES = {
-    burger: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=500&q=80",
-    pizza: "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?auto=format&fit=crop&w=500&q=80",
-    coffee: "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?auto=format&fit=crop&w=500&q=80",
-    fries: "https://images.unsplash.com/photo-1630384060421-cb20d0e0649d?auto=format&fit=crop&w=500&q=80",
-    coke: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&w=500&q=80"
-};
+// --- Premium Vector Illustrations (SVG) ---
+// Minimalist, flat, and modern food icons in orange/yellow themes.
 
-interface FoodItemProps {
-    src: string;
-    className?: string;
+const VectorBurger = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 100 100" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+        {/* Bun Top */}
+        <path d="M10 50 Q50 10 90 50" fill="#fbbf24" stroke="none" opacity="0.9" />
+        <path d="M20 35 L25 30 M40 25 L45 20 M60 25 L65 20 M80 35 L85 30" stroke="#fcd34d" strokeWidth="3" strokeLinecap="round" />
+        {/* Lettuce */}
+        <path d="M10 50 Q20 60 30 50 Q40 60 50 50 Q60 60 70 50 Q80 60 90 50" stroke="#4ade80" strokeWidth="4" fill="none" />
+        {/* Cheese */}
+        <path d="M10 55 L90 55 L85 65 L15 65 Z" fill="#facc15" stroke="none" />
+        {/* Patty */}
+        <rect x="10" y="65" width="80" height="10" rx="4" fill="#78350f" stroke="none" />
+        {/* Bun Bottom */}
+        <path d="M12 78 Q50 95 88 78 L88 75 L12 75 Z" fill="#fbbf24" stroke="none" />
+    </svg>
+);
+
+const VectorPizza = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 100 100" className={className} fill="none">
+        <g transform="rotate(45, 50, 50)">
+            {/* Crust */}
+            <path d="M50 10 L90 85 Q50 95 10 85 Z" fill="#fcd34d" />
+            {/* Cheese Layer */}
+            <path d="M50 20 L80 80 Q50 88 20 80 Z" fill="#fbbf24" />
+            {/* Pepperoni */}
+            <circle cx="50" cy="40" r="5" fill="#ef4444" opacity="0.8" />
+            <circle cx="40" cy="60" r="4" fill="#ef4444" opacity="0.8" />
+            <circle cx="60" cy="65" r="5" fill="#ef4444" opacity="0.8" />
+        </g>
+    </svg>
+);
+
+const VectorFries = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 100 100" className={className} fill="none">
+        {/* Box */}
+        <path d="M25 40 L35 90 L65 90 L75 40 Z" fill="#ef4444" />
+        <path d="M25 40 Q50 45 75 40" stroke="#991b1b" strokeWidth="1" opacity="0.3" />
+        {/* Fries Sticks */}
+        <rect x="30" y="10" width="8" height="40" fill="#fcd34d" transform="rotate(-15, 34, 40)" />
+        <rect x="42" y="5" width="8" height="45" fill="#fbbf24" />
+        <rect x="54" y="12" width="8" height="38" fill="#fcd34d" transform="rotate(10, 58, 40)" />
+        <rect x="64" y="20" width="8" height="30" fill="#fbbf24" transform="rotate(25, 68, 40)" />
+    </svg>
+);
+
+const VectorCoffee = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 100 100" className={className} fill="none">
+        {/* Cup */}
+        <path d="M25 30 L30 85 Q50 95 70 85 L75 30 Z" fill="#fff7ed" />
+        {/* Lid */}
+        <path d="M20 30 L80 30 L78 20 Q50 15 22 20 Z" fill="#d1d5db" />
+        {/* Sleeve */}
+        <path d="M27 45 L33 70 Q50 75 67 70 L73 45 Z" fill="#a8a29e" opacity="0.5" />
+        {/* Steam */}
+        <path d="M40 10 Q45 0 50 10 T60 10" stroke="#fff" strokeWidth="2" opacity="0.5" strokeLinecap="round" />
+    </svg>
+);
+
+
+// --- Floating Item Wrapper ---
+
+interface FloatingItemProps {
+    children: React.ReactNode;
+    className?: string; // Positioning classes (absolute top-xx left-xx)
     delay?: number;
+    rotate?: number;
+    scale?: number;
 }
 
-const FoodItem = ({ src, className, delay = 0 }: FoodItemProps) => (
+const FloatingItem = ({ children, className, delay = 0, rotate = 0, scale = 1 }: FloatingItemProps) => (
     <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.8 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{
-            duration: 0.8,
-            delay,
-            ease: [0.22, 1, 0.36, 1]
-        }}
-        className={`absolute rounded-full shadow-2xl border-4 border-white/20 overflow-hidden ${className}`}
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 1, delay, ease: "easeOut" }}
+        className={`absolute ${className} pointer-events-none`}
     >
-        <motion.img
-            src={src}
-            alt="Food item"
-            className="w-full h-full object-cover"
-            animate={{ scale: [1, 1.1, 1] }}
+        <motion.div
+            animate={{ y: [0, -15, 0], rotate: [rotate - 5, rotate + 5, rotate - 5] }}
             transition={{
-                duration: 5,
+                duration: 6,
                 repeat: Infinity,
                 repeatType: "reverse",
                 ease: "easeInOut",
                 delay: Math.random() * 2
             }}
-        />
-        {/* Gloss Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-        <div className="absolute inset-0 bg-white/10" />
+        >
+            <div className="relative drop-shadow-xl" style={{ transform: `scale(${scale})` }}>
+                {children}
+            </div>
+        </motion.div>
     </motion.div>
 );
 
+// --- Background Component ---
+
 export const LoginBackground = ({ children }: { children: React.ReactNode }) => {
     return (
-        <div className="relative w-full h-full bg-gradient-to-br from-orange-500 via-orange-600 to-red-600 overflow-hidden">
-            {/* --- Floating Food Grid --- */}
+        <div className="relative w-full h-full bg-gradient-to-br from-orange-500 via-orange-400 to-amber-500 overflow-hidden">
+
+            {/* --- Geometric Accents (Lines & Circles) --- */}
+            <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-20 pointer-events-none">
+                <svg className="w-full h-full" viewBox="0 0 800 600" preserveAspectRatio="none">
+                    {/* Big Curves */}
+                    <path d="M0,500 Q200,300 400,500 T800,200" stroke="white" strokeWidth="2" fill="none" opacity="0.3" />
+                    <path d="M-100,200 Q300,600 800,400" stroke="white" strokeWidth="2" fill="none" opacity="0.2" strokeDasharray="10,10" />
+
+                    {/* Circles */}
+                    <circle cx="10%" cy="20%" r="50" stroke="white" strokeWidth="1" fill="none" opacity="0.3" />
+                    <circle cx="90%" cy="80%" r="80" stroke="white" strokeWidth="1" fill="none" opacity="0.2" />
+                    <circle cx="80%" cy="10%" r="20" fill="white" opacity="0.2" />
+                </svg>
+            </div>
+
+            {/* --- Floating Illustrations --- */}
 
             {/* Top Right: Pizza */}
-            <FoodItem
-                src={IMAGES.pizza}
-                className="w-48 h-48 -right-8 top-12 md:w-56 md:h-56 lg:w-64 lg:h-64"
-                delay={0.1}
-            />
+            <FloatingItem className="-right-12 -top-12" delay={0.1} rotate={15} scale={2}>
+                <VectorPizza className="w-64 h-64" />
+            </FloatingItem>
 
             {/* Middle Left: Burger */}
-            <FoodItem
-                src={IMAGES.burger}
-                className="w-40 h-40 -left-12 top-1/4 md:w-48 md:h-48 lg:w-52 lg:h-52"
-                delay={0.2}
-            />
+            <FloatingItem className="-left-16 top-1/3" delay={0.2} rotate={-10} scale={2.2}>
+                <VectorBurger className="w-72 h-72" />
+            </FloatingItem>
 
-            {/* Bottom Right: Coke - made oblong or larger to fit bottle shape better if needed, but keeping circle for consistency */}
-            <FoodItem
-                src={IMAGES.coke}
-                className="w-36 h-36 right-4 bottom-32 md:w-44 md:h-44 lg:w-48 lg:h-48"
-                delay={0.3}
-            />
+            {/* Bottom Right: Fries */}
+            <FloatingItem className="-right-8 -bottom-8" delay={0.3} rotate={-15} scale={1.8}>
+                <VectorFries className="w-56 h-56" />
+            </FloatingItem>
 
             {/* Bottom Left: Coffee */}
-            <FoodItem
-                src={IMAGES.coffee}
-                className="w-32 h-32 left-8 bottom-8 md:w-40 md:h-40 lg:w-44 lg:h-44"
-                delay={0.4}
-            />
+            <FloatingItem className="left-12 -bottom-16" delay={0.4} rotate={10} scale={1.6}>
+                <VectorCoffee className="w-48 h-48" />
+            </FloatingItem>
 
-            {/* Top Center-ish: Fries */}
-            <FoodItem
-                src={IMAGES.fries}
-                className="w-24 h-24 left-1/2 -top-4 md:w-32 md:h-32"
-                delay={0.5}
-            />
+            {/* Subtle Abstract Shapes */}
+            <FloatingItem className="left-1/3 top-12" delay={0.5} scale={0.8}>
+                <div className="w-12 h-12 rounded-full border-2 border-white/30" />
+            </FloatingItem>
+            <FloatingItem className="right-1/3 bottom-24" delay={0.6} scale={0.6}>
+                <div className="w-8 h-8 rounded-lg bg-white/20 rotate-45" />
+            </FloatingItem>
 
-            {/* --- Decorative Elements --- */}
-            {/* Circle Outline */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] rounded-full border border-white/5 pointer-events-none" />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] rounded-full border border-white/5 pointer-events-none" />
 
-            {/* Noise/Texture Overlay (Optional) */}
-            <div className="absolute inset-0 bg-white/5 mix-blend-overlay pointer-events-none" />
-
-            {/* Content Wrapper (Glassmorphism backdrop for readability if items overlap) */}
-            <div className="relative z-10 w-full h-full flex flex-col justify-between p-12 bg-black/5 backdrop-blur-[2px]">
+            {/* Content Wrapper (Glassmorphism) */}
+            <div className="relative z-10 w-full h-full flex flex-col justify-between p-12 bg-white/5 backdrop-blur-[1px]">
                 {children}
             </div>
         </div>
