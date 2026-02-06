@@ -7,6 +7,7 @@ import { addToCart, updateQuantity } from '../store';
 import { Navbar } from '../components/Navbar';
 import { OrderCard } from '../components/OrderCard';
 import { staggerContainer, pageVariants } from '../utils/motion';
+import { useOrderPolling } from '../hooks/useOrderPolling';
 import { Search, ShoppingBag } from 'lucide-react';
 import type { RootState, MenuItem } from '../store';
 
@@ -59,6 +60,11 @@ export const MyOrders = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'ongoing' | 'history'>('ongoing');
     const [searchTerm, setSearchTerm] = useState('');
+
+    // Real-time status updates
+    useOrderPolling(orders, (updated) => {
+        setOrders(prev => prev.map(o => o._id === updated._id ? { ...o, ...updated, status: updated.status as Order['status'] } : o));
+    });
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -171,8 +177,8 @@ export const MyOrders = () => {
                             <button
                                 onClick={() => setActiveTab('ongoing')}
                                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'ongoing'
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700'
+                                    ? 'bg-white text-gray-900 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
                                     }`}
                             >
                                 Ongoing
@@ -180,8 +186,8 @@ export const MyOrders = () => {
                             <button
                                 onClick={() => setActiveTab('history')}
                                 className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'history'
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700'
+                                    ? 'bg-white text-gray-900 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
                                     }`}
                             >
                                 History

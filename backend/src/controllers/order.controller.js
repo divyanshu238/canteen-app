@@ -596,7 +596,38 @@ export const getOrderHistorySummary = async (req, res, next) => {
     }
 };
 
+export const getOrderStatus = async (req, res, next) => {
+    try {
+        const order = await Order.findById(req.params.id).select('status updatedAt userId');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                error: 'Order not found'
+            });
+        }
+
+        if (order.userId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                status: order.status,
+                updatedAt: order.updatedAt
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export default {
+    getOrderStatus,
     createOrder,
     verifyPayment,
     devConfirmOrder,

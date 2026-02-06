@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import type { RootState } from '../store';
 import { useSocket } from '../socket';
+import { useOrderPolling } from '../hooks/useOrderPolling';
 import { orderAPI } from '../api';
 import { Navbar } from '../components/Navbar';
 import {
@@ -52,6 +53,11 @@ export const OrderTracking = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const socket = useSocket();
+
+    // Real-time Polling
+    useOrderPolling(order, (updated) => {
+        setOrder(prev => prev ? { ...prev, ...updated } : null);
+    });
 
     useEffect(() => {
         if (!isAuthenticated) {

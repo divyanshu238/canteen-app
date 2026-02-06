@@ -146,6 +146,9 @@ export const orderAPI = {
     getAll: (params?: { status?: string; limit?: number; page?: number }) =>
         api.get('/orders', { params }),
 
+    getStatus: (id: string) =>
+        api.get(`/orders/${id}/status`),
+
     getOne: (id: string) =>
         api.get(`/orders/${id}`),
 

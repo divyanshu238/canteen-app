@@ -50,6 +50,13 @@ router.get('/', authenticate, orderController.getMyOrders);
 router.get('/history-summary', authenticate, orderController.getOrderHistorySummary);
 
 /**
+ * @route   GET /api/orders/:id/status
+ * @desc    Get order status
+ * @access  Private
+ */
+router.get('/:id/status', authenticate, orderController.getOrderStatus);
+
+/**
  * @route   GET /api/orders/:id
  * @desc    Get order details
  * @access  Private
