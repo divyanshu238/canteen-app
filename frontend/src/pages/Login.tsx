@@ -14,6 +14,7 @@ import { useDispatch } from 'react-redux';
 import { Mail, Lock, Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { register, login } from '../services/auth.service';
 import { login as storeLogin } from '../store';
+import { LoginBackground } from '../components/LoginBackground';
 
 type AuthMode = 'login' | 'register';
 type Role = 'student' | 'partner';
@@ -140,47 +141,51 @@ export const Login = () => {
     return (
         <div className="min-h-screen flex">
             {/* Left side - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-orange-500 via-orange-600 to-red-500 p-12 flex-col justify-between">
-                <div>
-                    <h1 className="text-4xl font-black text-white mb-2">Canteen Connect</h1>
-                    <p className="text-orange-100 text-lg">Campus food ordering made simple</p>
-                </div>
-
-                <div className="space-y-8">
-                    <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <Mail className="text-white" size={24} />
-                        </div>
+            <div className="hidden lg:block lg:w-1/2 relative">
+                <LoginBackground>
+                    <div className="flex flex-col justify-between h-full">
                         <div>
-                            <h3 className="text-white font-bold text-lg">Simple Login</h3>
-                            <p className="text-orange-100">Sign in with email and password</p>
+                            <h1 className="text-4xl font-black text-white mb-2 drop-shadow-md">Canteen Connect</h1>
+                            <p className="text-orange-100 text-lg drop-shadow-sm">Campus food ordering made simple</p>
                         </div>
-                    </div>
 
-                    <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <GraduationCap className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <h3 className="text-white font-bold text-lg">For Students</h3>
-                            <p className="text-orange-100">Order from campus canteens in seconds</p>
-                        </div>
-                    </div>
+                        <div className="space-y-8 relative z-20">
+                            <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/30">
+                                    <Mail className="text-white" size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-lg drop-shadow-md">Simple Login</h3>
+                                    <p className="text-orange-50 font-medium drop-shadow-sm">Sign in with email and password</p>
+                                </div>
+                            </div>
 
-                    <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                            <ChefHat className="text-white" size={24} />
-                        </div>
-                        <div>
-                            <h3 className="text-white font-bold text-lg">For Partners</h3>
-                            <p className="text-orange-100">Manage your canteen, receive orders instantly</p>
-                        </div>
-                    </div>
-                </div>
+                            <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/30">
+                                    <GraduationCap className="text-white" size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-lg drop-shadow-md">For Students</h3>
+                                    <p className="text-orange-50 font-medium drop-shadow-sm">Order from campus canteens in seconds</p>
+                                </div>
+                            </div>
 
-                <p className="text-orange-200 text-sm">
-                    © 2024 Canteen Connect. All rights reserved.
-                </p>
+                            <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/30">
+                                    <ChefHat className="text-white" size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-white font-bold text-lg drop-shadow-md">For Partners</h3>
+                                    <p className="text-orange-50 font-medium drop-shadow-sm">Manage your canteen, receive orders instantly</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p className="text-orange-200 text-sm relative z-20">
+                            © 2024 Canteen Connect. All rights reserved.
+                        </p>
+                    </div>
+                </LoginBackground>
             </div>
 
             {/* Right side - Form */}
