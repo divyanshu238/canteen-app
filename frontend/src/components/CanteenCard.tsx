@@ -16,6 +16,8 @@ interface Canteen {
     preparationTime?: string;
     isOpen?: boolean;
     isTopRated?: boolean;
+    reviewSummary?: string;
+    category?: string;
 }
 
 interface CanteenCardProps {
@@ -30,76 +32,115 @@ export const CanteenCard = ({ canteen, onClick }: CanteenCardProps) => {
         <motion.div
             layout
             variants={fadeInUp}
-            whileHover={cardHover.hover}
-            whileTap={cardHover.tap}
+            whileHover={{ y: -6, boxShadow: "0 20px 40px -10px rgba(0,0,0,0.12)" }}
+            whileTap={{ scale: 0.98 }}
             onClick={onClick}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            className="group cursor-pointer bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl border border-gray-100 relative w-full h-full flex flex-col"
+            className="group cursor-pointer bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100 relative w-full h-full flex flex-col transition-all duration-300"
         >
-            {/* Image Container */}
-            <div className="relative h-48 overflow-hidden bg-gray-100 rounded-t-3xl">
+            {/* Image Container with Dynamic Gradient */}
+            <div className="relative h-56 overflow-hidden bg-gray-100 rounded-t-3xl">
                 <motion.img
                     src={canteen.image}
                     alt={canteen.name}
                     className="w-full h-full object-cover"
-                    animate={{ scale: isHovered ? 1.05 : 1 }}
-                    transition={{ duration: 0.4 }}
+                    animate={{ scale: isHovered ? 1.08 : 1 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
                 />
 
-                {/* Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-60" />
+                {/* Scrim Gradient */}
+                <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
 
-                {/* Top Rated Badge or Offer */}
-                <div className="absolute bottom-3 left-3 flex flex-col gap-2 items-start">
-                    {canteen.isTopRated && <TopRatedBadge />}
+                {/* Top Floating Elements */}
+                <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10">
+                    {/* Category Chip */}
+                    <span className="px-3 py-1 bg-white/95 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider text-gray-800 shadow-sm border border-white/20">
+                        {canteen.category || "Dining"}
+                    </span>
 
-                    <motion.div
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 }}
-                        className="bg-white/90 backdrop-blur-sm text-gray-900 px-3 py-1 rounded-lg text-xs font-bold shadow-sm"
-                    >
-                        {canteen.priceRange} OFF
-                    </motion.div>
-                </div>
-
-                {/* Top Right Buttons */}
-                <div className="absolute top-3 right-3">
-                    <button className="p-2 rounded-full bg-white/20 backdrop-blur-md hover:bg-white text-white hover:text-red-500 transition-all">
-                        <Heart size={16} fill="currentColor" className="opacity-0 group-hover:opacity-100" />
+                    {/* Bookmark Button (Visual Only for now) */}
+                    <button className="p-2 rounded-full bg-white/20 backdrop-blur-md hover:bg-white text-white hover:text-red-500 transition-all shadow-sm border border-white/10 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 duration-300">
+                        <Heart size={16} fill="currentColor" />
                     </button>
                 </div>
-            </div>
 
-            {/* Content */}
-            <div className="p-4 flex flex-col flex-grow">
-                <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-bold text-lg text-gray-900 line-clamp-1 group-hover:text-orange-600 transition-colors">
-                        {canteen.name}
-                    </h3>
-                    <div className="flex items-center gap-1">
-                        <RatingBadge
-                            rating={canteen.rating}
-                            count={canteen.totalRatings}
-                            variant="card"
-                        />
-                        {canteen.totalRatings && canteen.totalRatings > 0 && (
-                            <span className="text-xs font-medium text-gray-400">({canteen.totalRatings})</span>
-                        )}
+                {/* Bottom Left Badges */}
+                <div className="absolute bottom-4 left-4 flex flex-col gap-2 items-start z-10">
+                    {canteen.isTopRated && <TopRatedBadge />}
+
+                    {/* Discount Badge */}
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-lg shadow-blue-600/20">
+                        <span className="text-[10px] uppercase tracking-wide">Deal</span>
+                        <span className="w-0.5 h-3 bg-white/20 rounded-full" />
+                        <span>{canteen.priceRange} OFF</span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 mb-3 text-sm text-gray-500">
-                    <span className="line-clamp-1 flex-1">{canteen.tags?.join(", ") || "Fast Food"}</span>
-                    <span className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0" />
-                    <span className="font-medium whitespace-nowrap">{canteen.priceRange} for two</span>
+                {/* Rating Badge (Bottom Right) */}
+                <div className="absolute bottom-4 right-4 z-10">
+                    <div className="flex items-center gap-1.5 bg-white px-2 py-1.5 rounded-xl shadow-lg">
+                        <div className="bg-green-600 text-white p-1 rounded-full">
+                            <Star size={10} fill="currentColor" />
+                        </div>
+                        <div className="flex flex-col items-start leading-none pr-1">
+                            <span className="text-sm font-black text-gray-900">{canteen.rating?.toFixed(1) || "New"}</span>
+                            {canteen.totalRatings ? (
+                                <span className="text-[9px] font-medium text-gray-500 mt-0.5">{canteen.totalRatings}+ ratings</span>
+                            ) : (
+                                <span className="text-[9px] font-medium text-gray-400 mt-0.5">No ratings</span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Content Section */}
+            <div className="p-5 flex flex-col flex-grow relative bg-white">
+
+                {/* Title & Delivery Time */}
+                <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-extrabold text-xl text-gray-900 leading-tight group-hover:text-orange-600 transition-colors line-clamp-1">
+                        {canteen.name}
+                    </h3>
+                    <div className="flex items-center gap-1 text-xs font-semibold text-gray-500 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
+                        <Clock size={12} className="text-orange-500" />
+                        <span>{canteen.preparationTime || '25-30m'}</span>
+                    </div>
                 </div>
 
-                <div className="mt-auto pt-3 border-t border-dashed border-gray-200 flex items-center gap-2 text-xs font-medium text-gray-500">
-                    <Clock size={12} className="text-orange-500" />
-                    <span>{canteen.preparationTime || '25-30 min'}</span>
-                    <span className="ml-auto text-orange-600 group-hover:underline">View Menu</span>
+                {/* Tags & Price */}
+                <div className="flex items-center gap-2 mb-4 text-sm text-gray-500 font-medium">
+                    <span className="line-clamp-1 text-gray-600">{canteen.tags?.join(", ") || "Fast Food, Snacks"}</span>
+                    <span className="w-1 h-1 rounded-full bg-gray-300 flex-shrink-0" />
+                    <span>{canteen.priceRange} for two</span>
+                </div>
+
+                {/* AI Summary Section */}
+                {canteen.reviewSummary && (
+                    <div className="mt-auto mb-3 relative">
+                        {/* Quote Icon Background */}
+                        <div className="absolute -top-1 -left-1 text-gray-100 z-0">
+                            <span className="text-4xl leading-none font-serif">“</span>
+                        </div>
+
+                        <p className="relative z-10 text-xs text-gray-600 italic leading-relaxed pl-3 border-l-2 border-orange-200 line-clamp-2">
+                            {canteen.reviewSummary}
+                        </p>
+                    </div>
+                )}
+
+                {/* Divider */}
+                {!canteen.reviewSummary && <div className="mt-auto" />}
+
+                {/* Action Footer */}
+                <div className="pt-3 border-t border-dashed border-gray-100 flex items-center justify-between group/btn">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                        Open Now
+                    </span>
+                    <span className="text-sm font-bold text-orange-600 flex items-center gap-1 group-hover/btn:gap-2 transition-all">
+                        View Menu <span className="text-lg leading-none">→</span>
+                    </span>
                 </div>
             </div>
         </motion.div>

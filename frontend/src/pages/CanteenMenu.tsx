@@ -30,6 +30,7 @@ interface Canteen {
         2: number;
         1: number;
     };
+    reviewSummary?: string;
 
     priceRange: string;
     preparationTime?: string;
@@ -273,6 +274,22 @@ export const CanteenMenu = () => {
                             </div>
                         )}
 
+                        {/* AI Review Summary (Desktop) */}
+                        {canteen.reviewSummary && (
+                            <div className="hidden lg:block bg-gradient-to-br from-indigo-50 to-purple-50 p-4 rounded-2xl border border-indigo-100 shadow-sm relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-3 opacity-10">
+                                    <Star size={48} fill="currentColor" className="text-indigo-900" />
+                                </div>
+                                <h3 className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                    AI Summary
+                                </h3>
+                                <p className="text-xs text-indigo-900/80 italic leading-relaxed font-medium">
+                                    "{canteen.reviewSummary}"
+                                </p>
+                            </div>
+                        )}
+
                         {/* Categories Desktop */}
                         {!searchQuery && categories.length > 0 && (
                             <div className="hidden lg:block sticky top-24">
@@ -397,6 +414,6 @@ export const CanteenMenu = () => {
                     </div>
                 </div>
             </div>
-        </motion.div>
+        </motion.div >
     );
 };

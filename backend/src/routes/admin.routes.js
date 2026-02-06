@@ -71,4 +71,11 @@ router.put('/orders/:id', adminController.updateOrder);
  */
 router.get('/analytics', adminController.getAnalytics);
 
+/**
+ * @route   GET /api/admin/analytics/ratings
+ * @desc    Get rating trends and fraud stats
+ * @access  Admin
+ */
+router.get('/analytics/ratings', adminController.getRatingAnalytics);
+
 export default router;

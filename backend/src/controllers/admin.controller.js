@@ -1,4 +1,4 @@
-import { User, Canteen, Order, MenuItem } from '../models/index.js';
+import { User, Canteen, Order, MenuItem, Review } from '../models/index.js';
 
 /**
  * Get all users
@@ -388,6 +388,60 @@ export const getAnalytics = async (req, res, next) => {
     }
 };
 
+
+/**
+ * Get Rating & Review Analytics
+ * GET /api/admin/analytics/ratings
+ */
+export const getRatingAnalytics = async (req, res, next) => {
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // 1. Avg Rating Over Time (Line Chart)
+        const ratingTrend = await Review.aggregate([
+            { $match: { createdAt: { $gte: thirtyDaysAgo } } },
+            {
+                $group: {
+                    _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                    avgRating: { $avg: '$rating' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // 3. Flagged Reviews Count
+        const flaggedCount = await Review.countDocuments({ isFlagged: true });
+
+        // 4. Top Rated Canteens (Ranking)
+        const topCanteens = await Canteen.find({ isOpen: true, isApproved: true })
+            .sort({ rating: -1, totalRatings: -1 })
+            .limit(5)
+            .select('name rating totalRatings');
+
+        // 5. Recent Flagged Reviews
+        const flaggedReviews = await Review.find({ isFlagged: true })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .populate('canteenId', 'name')
+            .populate('userId', 'name');
+
+        res.json({
+            success: true,
+            data: {
+                trend: ratingTrend,
+                flaggedCount,
+                topCanteens,
+                flaggedReviews
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
 /**
  * Create admin user (one-time setup)
  * POST /api/admin/setup
@@ -445,5 +499,6 @@ export default {
     getAllOrders,
     updateOrder,
     getAnalytics,
+    getRatingAnalytics,
     setupAdmin
 };

@@ -111,8 +111,17 @@ export const canteenAPI = {
     /**
      * Get all available categories from the database
      */
+    /**
+     * Get all available categories from the database
+     */
     getAllCategories: () =>
         api.get('/canteens/categories/all'),
+
+    /**
+     * Get top rated canteens by category
+     */
+    getTopRatedByCategory: (category: string) =>
+        api.get('/canteens/top-rated', { params: { category } }),
 };
 
 // Search API
@@ -227,6 +236,9 @@ export const adminAPI = {
 
     getAnalytics: () =>
         api.get('/admin/analytics'),
+
+    getRatingAnalytics: () =>
+        api.get('/admin/analytics/ratings'),
 
     setupAdmin: (data: { name: string; phoneNumber: string }) =>
         api.post('/admin/setup', data),

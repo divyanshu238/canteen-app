@@ -18,6 +18,7 @@ router.get('/debug/category-check', canteenController.debugCategoryCheck);
  * @access  Public
  * NOTE: This route MUST be before /:id to avoid matching 'categories' as an ID
  */
+router.get('/top-rated', canteenController.getTopRatedByCategory);
 router.get('/categories/all', canteenController.getAllCategories);
 
 /**
