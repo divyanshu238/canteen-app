@@ -1,6 +1,7 @@
+
 import { useState, useEffect } from 'react';
 import { superadminAPI } from '../../api';
-import { RefreshCw, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 
 export const AuditLogsTab = () => {
     const [logs, setLogs] = useState<any[]>([]);
@@ -14,6 +15,7 @@ export const AuditLogsTab = () => {
 
     useEffect(() => {
         loadLogs();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters]);
 
     const loadLogs = async () => {
@@ -36,13 +38,13 @@ export const AuditLogsTab = () => {
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap gap-4">
-                <button onClick={loadLogs} className="p-2 bg-white/10 rounded-lg text-white hover:bg-white/20">
+                <button onClick={loadLogs} className="p-2 bg-white border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 shadow-sm transition-colors">
                     <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 </button>
                 <select
                     value={filters.entityType}
                     onChange={(e) => setFilters(prev => ({ ...prev, entityType: e.target.value }))}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
                     <option value="">All Entities</option>
                     <option value="User">User</option>
@@ -57,64 +59,65 @@ export const AuditLogsTab = () => {
                     placeholder="Search Admin ID..."
                     value={filters.adminId}
                     onChange={(e) => setFilters(prev => ({ ...prev, adminId: e.target.value }))}
-                    className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder:text-white/50"
+                    className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
             </div>
 
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                 <table className="w-full text-left">
-                    <thead className="bg-white/5 text-white/70">
+                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
                         <tr>
-                            <th className="px-6 py-3">Timestamp</th>
-                            <th className="px-6 py-3">Admin</th>
-                            <th className="px-6 py-3">Action</th>
-                            <th className="px-6 py-3">Entity</th>
-                            <th className="px-6 py-3">Reason</th>
-                            <th className="px-6 py-3"></th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider">Timestamp</th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider">Admin</th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider">Action</th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider">Entity</th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider">Reason</th>
+                            <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider"></th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/10">
+                    <tbody className="divide-y divide-gray-200">
                         {logs.map((log) => (
                             <>
-                                <tr key={log._id} className="text-white hover:bg-white/5 cursor-pointer" onClick={() => setExpandedLog(expandedLog === log._id ? null : log._id)}>
-                                    <td className="px-6 py-3 text-sm whitespace-nowrap">
+                                <tr key={log._id} className="text-gray-900 hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => setExpandedLog(expandedLog === log._id ? null : log._id)}>
+                                    <td className="px-6 py-4 text-sm whitespace-nowrap text-gray-600">
                                         {new Date(log.timestamp).toLocaleString()}
                                     </td>
-                                    <td className="px-6 py-3 text-sm">
+                                    <td className="px-6 py-4 text-sm">
                                         <div className="font-medium">{log.adminName}</div>
-                                        <div className="text-xs text-white/50">{log.adminEmail}</div>
+                                        <div className="text-xs text-gray-500">{log.adminEmail}</div>
                                     </td>
-                                    <td className="px-6 py-3 text-sm font-mono text-purple-300">
+                                    <td className="px-6 py-4 text-sm font-mono text-purple-600 bg-purple-50 w-fit rounded px-2">
                                         {log.action}
                                     </td>
-                                    <td className="px-6 py-3 text-sm">
-                                        {log.entityType} <span className="text-white/30 text-xs">#{log.entityId?.slice(-6)}</span>
+                                    <td className="px-6 py-4 text-sm">
+                                        {log.entityType} <span className="text-gray-400 text-xs text-mono">#{log.entityId?.slice(-6)}</span>
                                     </td>
-                                    <td className="px-6 py-3 text-sm text-white/70 truncate max-w-[200px]">
+                                    <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-[200px]">
                                         {log.reason || '-'}
                                     </td>
-                                    <td className="px-6 py-3 text-right">
+                                    <td className="px-6 py-4 text-right text-gray-400">
                                         {expandedLog === log._id ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
                                     </td>
                                 </tr>
                                 {expandedLog === log._id && (
-                                    <tr className="bg-black/20">
-                                        <td colSpan={6} className="px-6 py-4">
-                                            <div className="grid grid-cols-2 gap-4 text-xs font-mono text-white/80">
+                                    <tr className="bg-gray-50">
+                                        <td colSpan={6} className="px-6 py-4 border-t border-gray-100">
+                                            <div className="grid grid-cols-2 gap-4 text-xs font-mono text-gray-700 bg-white p-4 rounded-lg border border-gray-200">
                                                 <div>
-                                                    <div className="font-bold text-red-300 mb-1">Before State</div>
-                                                    <pre className="bg-black/30 p-2 rounded overflow-auto max-h-[200px]">
+                                                    <div className="font-bold text-red-600 mb-2 uppercase tracking-wider">Before State</div>
+                                                    <pre className="bg-gray-50 p-3 rounded border border-gray-200 overflow-auto max-h-[200px] text-gray-600">
                                                         {log.beforeState ? JSON.stringify(log.beforeState, null, 2) : 'N/A'}
                                                     </pre>
                                                 </div>
                                                 <div>
-                                                    <div className="font-bold text-green-300 mb-1">After State</div>
-                                                    <pre className="bg-black/30 p-2 rounded overflow-auto max-h-[200px]">
+                                                    <div className="font-bold text-green-600 mb-2 uppercase tracking-wider">After State</div>
+                                                    <pre className="bg-gray-50 p-3 rounded border border-gray-200 overflow-auto max-h-[200px] text-gray-600">
                                                         {log.afterState ? JSON.stringify(log.afterState, null, 2) : 'N/A'}
                                                     </pre>
                                                 </div>
-                                                <div className="col-span-2 mt-2">
-                                                    <span className="font-bold text-gray-400">Metadata:</span> IP: {log.ipAddress} | UA: {log.userAgent}
+                                                <div className="col-span-2 mt-2 pt-2 border-t border-gray-100 text-gray-500 flex justify-between">
+                                                    <span>Action: <strong>{log.action}</strong></span>
+                                                    <span>IP: {log.ipAddress} | UA: {log.userAgent}</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -124,7 +127,7 @@ export const AuditLogsTab = () => {
                         ))}
                         {logs.length === 0 && !loading && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-8 text-center text-white/50">
+                                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                     No audit logs found.
                                 </td>
                             </tr>

@@ -58,8 +58,32 @@ export const connectDB = async () => {
         isConnected = false;
     });
 
+
+    // ... existing ...
+
     // Attempt connection
     try {
+        let uriToConnect = mongoUri;
+
+        // Check for Memory DB fallback (Development/Testing only)
+        if (process.env.USE_MEMORY_DB === 'true' && process.env.NODE_ENV !== 'production') {
+            console.log('🧠 USE_MEMORY_DB=true: Initializing MongoMemoryServer...');
+            try {
+                // Dynamic import to avoid production dependency issues if not installed
+                const { MongoMemoryServer } = await import('mongodb-memory-server');
+                const mongod = await MongoMemoryServer.create();
+                uriToConnect = mongod.getUri();
+
+                console.log(`🧠 MongoMemoryServer started at: ${uriToConnect}`);
+
+                // Keep reference to stop it later if needed (optional)
+                // global.__MONGOD__ = mongod; 
+            } catch (err) {
+                console.warn('⚠️ Failed to start MongoMemoryServer (dependency missing?), falling back to MONGO_URI.');
+                console.warn(`   Error: ${err.message}`);
+            }
+        }
+
         const connectionOptions = {
             serverSelectionTimeoutMS: 10000, // 10 second timeout
             socketTimeoutMS: 45000,          // 45 second socket timeout
@@ -69,13 +93,14 @@ export const connectDB = async () => {
         };
 
         // Mask credentials in logs
-        const maskedUri = mongoUri.replace(
-            /mongodb(\+srv)?:\/\/([^:]+):([^@]+)@/,
-            'mongodb$1://$2:****@'
-        );
-        console.log(`🔌 Connecting to MongoDB: ${maskedUri}`);
+        // ...
 
-        await mongoose.connect(mongoUri, connectionOptions);
+        console.log(`🔌 Connecting to MongoDB...`);
+
+        await mongoose.connect(uriToConnect, connectionOptions);
+
+        // ...
+
 
         // Log connection details
         const { host, port, name } = mongoose.connection;

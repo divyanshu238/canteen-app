@@ -7,7 +7,7 @@ export interface User {
     name: string;
     email?: string;
     phone?: string;
-    role: 'student' | 'partner' | 'admin';
+    role: 'student' | 'partner' | 'admin' | 'superadmin';
     canteenId?: string;
     isApproved?: boolean;
 }

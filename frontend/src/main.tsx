@@ -17,7 +17,7 @@ import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { Profile } from './pages/Profile';
 import { MyOrders } from './pages/MyOrders';
-import SuperAdminDashboard from './pages/admin/SuperAdminDashboard';
+// import SuperAdminDashboard from './pages/admin/SuperAdminDashboard'; // Deprecated
 import './index.css';
 
 // Protected Route Components
@@ -88,24 +88,15 @@ ReactDOM.createRoot(rootElement).render(
                                 </ProtectedRoute>
                             } />
 
-                            {/* Admin Routes */}
+                            {/* Admin Routes - Shared for Admin & Super Admin */}
                             <Route path="/admin" element={
-                                <ProtectedRoute allowedRoles={['admin']}>
+                                <ProtectedRoute allowedRoles={['admin', 'superadmin']}>
                                     <AdminDashboard />
                                 </ProtectedRoute>
                             } />
 
-                            {/* Super Admin Control Plane */}
-                            <Route path="/superadmin" element={
-                                <ProtectedRoute allowedRoles={['admin']}>
-                                    <SuperAdminDashboard />
-                                </ProtectedRoute>
-                            } />
-                            <Route path="/superadmin/*" element={
-                                <ProtectedRoute allowedRoles={['admin']}>
-                                    <SuperAdminDashboard />
-                                </ProtectedRoute>
-                            } />
+                            {/* Redirect legacy superadmin route */}
+                            <Route path="/superadmin/*" element={<Navigate to="/admin" replace />} />
 
                             {/* Catch-all redirect */}
                             <Route path="*" element={<Navigate to="/" replace />} />

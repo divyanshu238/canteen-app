@@ -1,11 +1,24 @@
+
 import { useEffect, useState } from 'react';
 import { adminAPI } from '../api';
 import { Navbar } from '../components/Navbar';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSelector } from 'react-redux';
+import type { RootState } from '../store';
 import {
     Users, ShoppingBag, DollarSign, TrendingUp,
-    AlertTriangle, Star, Activity
+    AlertTriangle, Star, Activity, Shield, Store,
+    Coffee, FileText, Settings
 } from 'lucide-react';
+
+// Super Admin Tabs
+import { UsersTab } from './admin/UsersTab';
+import { CanteensTab } from './admin/CanteensTab';
+import { OrdersTab } from './admin/OrdersTab';
+import { ReviewsTab } from './admin/ReviewsTab';
+import { AuditLogsTab } from './admin/AuditLogsTab';
+import { SystemSettingsTab } from './admin/SystemSettingsTab';
+import { MenuTab } from './admin/MenuTab';
 
 interface RatingTrend {
     _id: string; // Date
@@ -25,9 +38,13 @@ interface AnalyticsData {
     };
 }
 
+type SuperAdminTab = 'users' | 'canteens' | 'menu' | 'orders' | 'reviews' | 'audit' | 'settings';
+
 export const AdminDashboard = () => {
+    const { user } = useSelector((state: RootState) => state.auth);
     const [data, setData] = useState<AnalyticsData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [activeSuperTab, setActiveSuperTab] = useState<SuperAdminTab>('users');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -51,6 +68,8 @@ export const AdminDashboard = () => {
         fetchData();
     }, []);
 
+    const isSuperAdmin = user?.role === 'superadmin';
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-50">
@@ -69,17 +88,40 @@ export const AdminDashboard = () => {
 
     const { users, orders, revenue, ratingAnalytics } = data;
 
+    const superAdminTabs: { id: SuperAdminTab, label: string, icon: any }[] = [
+        { id: 'users', label: 'User Management', icon: Users },
+        { id: 'canteens', label: 'Canteens', icon: Store },
+        { id: 'menu', label: 'Global Menu', icon: Coffee },
+        { id: 'orders', label: 'All Orders', icon: ShoppingBag },
+        { id: 'reviews', label: 'Reviews', icon: Star },
+        { id: 'audit', label: 'Audit Logs', icon: FileText },
+        { id: 'settings', label: 'System', icon: Settings },
+    ];
+
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 pb-20">
             <Navbar />
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Header with Badges */}
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-                    <span className="text-sm text-gray-500">Live Overview</span>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+                            Admin Dashboard
+                            {isSuperAdmin && (
+                                <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold uppercase tracking-wider rounded-full border border-purple-200 flex items-center gap-1">
+                                    <Shield size={12} fill="currentColor" /> Super Admin
+                                </span>
+                            )}
+                        </h1>
+                        <p className="text-sm text-gray-500 mt-1">Platform overview & controls</p>
+                    </div>
+                    <span className="text-sm text-gray-400 font-mono">
+                        v{import.meta.env.VITE_APP_VERSION || '1.0.0'}
+                    </span>
                 </div>
 
-                {/* 1. Key Metrics Cards */}
+                {/* 1. Key Metrics Cards (Visible to All Admins) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <StatsCard
                         title="Total Revenue (Monthly)"
@@ -109,8 +151,8 @@ export const AdminDashboard = () => {
                     />
                 </div>
 
-                {/* 2. Rating Trend & Analytics */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                {/* 2. Rating Trend & Analytics (Visible to All Admins) */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
                     {/* Main Chart Area */}
                     <div className="lg:col-span-2 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                         <div className="flex items-center justify-between mb-6">
@@ -171,8 +213,8 @@ export const AdminDashboard = () => {
                             {ratingAnalytics?.topCanteens.map((canteen, i) => (
                                 <div key={canteen._id} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-xl transition-colors">
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${i === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                            i === 1 ? 'bg-gray-100 text-gray-600' :
-                                                'bg-orange-50 text-orange-600'
+                                        i === 1 ? 'bg-gray-100 text-gray-600' :
+                                            'bg-orange-50 text-orange-600'
                                         }`}>
                                         #{i + 1}
                                     </div>
@@ -185,44 +227,87 @@ export const AdminDashboard = () => {
                                     </div>
                                 </div>
                             ))}
+                            {(!ratingAnalytics?.topCanteens || ratingAnalytics.topCanteens.length === 0) && (
+                                <div className="text-center text-gray-400 text-sm py-4">No data available</div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* 3. Flagged Reviews Section */}
-                {ratingAnalytics?.flaggedReviews && ratingAnalytics.flaggedReviews.length > 0 && (
-                    <div className="bg-white rounded-3xl shadow-sm border border-red-100 overflow-hidden mb-8">
-                        <div className="p-6 border-b border-gray-100 bg-red-50/50 flex justify-between items-center">
-                            <h3 className="font-bold text-red-900 flex items-center gap-2">
-                                <AlertTriangle size={20} className="text-red-600" />
-                                Potentially Fraudulent Reviews
-                            </h3>
-                            <span className="text-xs font-bold bg-white text-red-600 px-3 py-1 rounded-full border border-red-200">
-                                Action Required
-                            </span>
+                {/* ================================================================================== */}
+                {/* 3. SUPER ADMIN CONTROLS SECTION */}
+                {/* ================================================================================== */}
+
+                {isSuperAdmin && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                        className="border-t-2 border-dashed border-gray-200 pt-12"
+                    >
+                        <div className="flex items-center gap-3 mb-8">
+                            <div className="p-3 bg-purple-600 rounded-xl text-white shadow-lg shadow-purple-600/20">
+                                <Shield className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-900">Super Admin Controls</h2>
+                                <p className="text-gray-500">System-wide management and overrides</p>
+                            </div>
                         </div>
-                        <div className="divide-y divide-gray-100">
-                            {ratingAnalytics.flaggedReviews.map((review: any) => (
-                                <div key={review._id} className="p-6 hover:bg-gray-50 transition-colors">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 text-sm mb-1">{review.canteenId?.name || 'Unknown Canteen'}</h4>
-                                            <p className="text-xs text-gray-500">By {review.userId?.name || 'Unknown User'} • {new Date(review.createdAt).toLocaleDateString()}</p>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-yellow-600 text-sm font-bold bg-yellow-50 px-2 py-1 rounded-lg">
-                                            {review.rating} <Star size={12} fill="currentColor" />
-                                        </div>
-                                    </div>
-                                    <p className="text-sm text-gray-600 mb-3 italic">"{review.comment}"</p>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-100">
-                                            Flagged: {review.flagReason}
-                                        </span>
-                                    </div>
+
+                        <div className="flex flex-col lg:flex-row gap-8">
+                            {/* Vertical Tab Navigation (Desktop) / Horizontal (Mobile) */}
+                            <div className="lg:w-64 flex-shrink-0">
+                                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-2 space-y-1 sticky top-24">
+                                    {superAdminTabs.map((tab) => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveSuperTab(tab.id)}
+                                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeSuperTab === tab.id
+                                                ? 'bg-purple-50 text-purple-700'
+                                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                                }`}
+                                        >
+                                            <tab.icon className={`w-5 h-5 ${activeSuperTab === tab.id ? 'text-purple-600' : 'text-gray-400'}`} />
+                                            {tab.label}
+                                            {activeSuperTab === tab.id && (
+                                                <motion.div layoutId="activeTabIndicator" className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-600" />
+                                            )}
+                                        </button>
+                                    ))}
                                 </div>
-                            ))}
+                            </div>
+
+                            {/* Tab Content Area */}
+                            <div className="flex-1 min-w-0">
+                                <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 min-h-[500px]">
+                                    <div className="mb-6 pb-4 border-b border-gray-100 flex justify-between items-center">
+                                        <h3 className="text-xl font-bold text-gray-900">
+                                            {superAdminTabs.find(t => t.id === activeSuperTab)?.label}
+                                        </h3>
+                                    </div>
+
+                                    <AnimatePresence mode="wait">
+                                        <motion.div
+                                            key={activeSuperTab}
+                                            initial={{ opacity: 0, x: 20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -20 }}
+                                            transition={{ duration: 0.2 }}
+                                        >
+                                            {activeSuperTab === 'users' && <UsersTab />}
+                                            {activeSuperTab === 'canteens' && <CanteensTab />}
+                                            {activeSuperTab === 'menu' && <MenuTab />}
+                                            {activeSuperTab === 'orders' && <OrdersTab />}
+                                            {activeSuperTab === 'reviews' && <ReviewsTab />}
+                                            {activeSuperTab === 'audit' && <AuditLogsTab />}
+                                            {activeSuperTab === 'settings' && <SystemSettingsTab />}
+                                        </motion.div>
+                                    </AnimatePresence>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </motion.div>
                 )}
             </div>
         </div>
