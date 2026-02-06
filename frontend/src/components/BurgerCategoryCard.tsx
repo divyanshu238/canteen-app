@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useAnimation, Variants, useReducedMotion } from 'framer-motion';
+import { motion, useAnimation, useReducedMotion } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 
 interface BurgerCategoryCardProps {
     onClick?: () => void;
