@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, useAnimation, useReducedMotion } from 'framer-motion';
-import type { Variants } from 'framer-motion';
+import { motion, useSpring, useMotionValue, AnimatePresence } from 'framer-motion';
+import { TrendingUp } from 'lucide-react';
 
 interface BurgerCategoryCardProps {
     onClick?: () => void;
@@ -9,180 +9,132 @@ interface BurgerCategoryCardProps {
 }
 
 /**
- * Premium Burger Category Card
+ * Premium Burger Category Card (Realistic Image Version)
  * 
  * Features:
- * - Custom CSS-built burger for granular layer animation
- * - Physics-based bounce interactions using Framer Motion
- * - "Freshness" shine effect
- * - Accessible (respects reduced motion)
- * - Desktop-only hover interaction
+ * - High-quality food imagery to match Pizza/Biryani styling
+ * - Subtle parallax tilt on hover
+ * - "Trending" badge for visual interest
+ * - Smooth scaling and shadow interactions
  */
 export const BurgerCategoryCard = ({ onClick, className = '' }: BurgerCategoryCardProps) => {
     const navigate = useNavigate();
-    const controls = useAnimation();
     const [isHovered, setIsHovered] = useState(false);
-    const shouldReduceMotion = useReducedMotion();
+
+    // Mouse tilt effect logic
+    const x = useMotionValue(0);
+    const y = useMotionValue(0);
+
+    // Smooth spring animation for tilt (Premium feel)
+    const mouseX = useSpring(x, { stiffness: 300, damping: 30 });
+    const mouseY = useSpring(y, { stiffness: 300, damping: 30 });
 
     const handleClick = () => {
         if (onClick) onClick();
         else navigate('/category/burger');
     };
 
-    const handleMouseEnter = () => {
-        // Prevent animation on touch devices (sticky hover) and if user prefers reduced motion
-        // We use matchMedia to detect pointer accuracy (coarse usually means touch)
-        const isTouchDevice = window.matchMedia('(pointer: coarse)').matches;
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (window.matchMedia('(pointer: coarse)').matches) return;
 
-        if (!isTouchDevice && !shouldReduceMotion) {
-            setIsHovered(true);
-            controls.start('hover');
-        } else {
-            // For touch/reduced motion, just set state for simple CSS transitions if any
-            setIsHovered(true);
-        }
+        const rect = e.currentTarget.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const mouseXVal = e.clientX - rect.left;
+        const mouseYVal = e.clientY - rect.top;
+
+        const xPct = mouseXVal / width - 0.5;
+        const yPct = mouseYVal / height - 0.5;
+
+        x.set(xPct * 12); // Slightly stronger tilt for hero burger
+        y.set(yPct * -12);
     };
 
     const handleMouseLeave = () => {
+        x.set(0);
+        y.set(0);
         setIsHovered(false);
-        controls.start('idle');
-    };
-
-    // Animation Variants for the Card Container (Scale & Lift)
-    const cardVariants: Variants = {
-        idle: {
-            scale: 1,
-            y: 0,
-            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)"
-        },
-        hover: {
-            scale: 1.05,
-            y: -5,
-            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-            transition: { type: "spring", stiffness: 300, damping: 20 }
-        }
-    };
-
-    // Staggered bounce for burger layers
-    // Each layer has a slightly different delay/stiffness to create a "jiggle" feel
-    const layerVariants = (delay: number): Variants => ({
-        idle: { y: 0, scale: 1 },
-        hover: {
-            y: [0, -8, 0], // Jump up and land
-            scale: [1, 1.05, 1], // Subtle squash/stretch
-            transition: {
-                duration: 0.4,
-                delay: delay,
-                times: [0, 0.5, 1],
-                ease: "easeOut"
-            }
-        }
-    });
-
-    // Steam/Shine effect
-    const steamVariants: Variants = {
-        idle: { opacity: 0, y: 10 },
-        hover: {
-            opacity: [0, 0.6, 0],
-            y: -15,
-            transition: { duration: 1, ease: "easeOut" }
-        }
     };
 
     return (
-        <div
-            className={`flex-shrink-0 cursor-pointer group outline-none ${className}`}
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`relative group cursor-pointer flex-shrink-0 py-2 perspective-1000 ${className}`}
             onClick={handleClick}
-            onMouseEnter={handleMouseEnter}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={handleMouseLeave}
+            style={{ perspective: 1000 }}
             role="button"
-            aria-label="Burger Category"
             tabIndex={0}
         >
             <motion.div
-                className="
-                    relative w-32 h-32 rounded-3xl overflow-hidden
-                    bg-gradient-to-br from-amber-400 via-orange-400 to-orange-500
-                    origin-bottom
-                "
-                initial="idle"
-                animate={isHovered ? "hover" : "idle"}
-                variants={cardVariants}
-                whileTap={{ scale: 0.95 }}
+                style={{
+                    rotateX: mouseY,
+                    rotateY: mouseX,
+                }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.96 }}
+                className="relative w-40 h-52 sm:w-48 sm:h-60 rounded-[2rem] bg-white shadow-xl shadow-orange-100/50 overflow-visible transition-shadow duration-300"
             >
-                {/* Background Glow/Highlight */}
-                <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                {/* 1. Dynamic Gradient Background */}
+                <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-orange-100 to-amber-50 opacity-100" />
 
-                {/* Top Shine */}
-                <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent rounded-t-3xl" />
-
-                {/* Burger Composition */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none transform translate-y-2">
-
-                    {/* Steam Particles */}
-                    <div className="absolute top-4 flex gap-2">
-                        <motion.div
-                            variants={steamVariants}
-                            className="w-1.5 h-4 bg-white/40 rounded-full blur-[1px]"
-                        />
-                        <motion.div
-                            variants={steamVariants}
-                            transition={{ delay: 0.1 }}
-                            className="w-1.5 h-3 bg-white/40 rounded-full blur-[1px] mt-1"
-                        />
-                    </div>
-
-                    {/* Top Bun */}
-                    <motion.div
-                        variants={layerVariants(0)}
-                        className="w-16 h-8 bg-amber-200 rounded-t-full relative shadow-sm z-40"
-                        style={{ backgroundColor: '#F0BA65' }}
-                    >
-                        <div className="absolute top-2 left-3 w-1 h-1 bg-amber-100/70 rounded-full" />
-                        <div className="absolute top-3 left-6 w-1 h-1 bg-amber-100/70 rounded-full" />
-                        <div className="absolute top-2 right-4 w-1 h-1 bg-amber-100/70 rounded-full" />
-                        <div className="absolute top-4 right-7 w-1 h-1 bg-amber-100/70 rounded-full" />
-                    </motion.div>
-
-                    {/* Lettuce */}
-                    <motion.div
-                        variants={layerVariants(0.05)}
-                        className="w-17 h-3 -mt-1 bg-green-500 rounded-lg relative z-30 flex justify-between px-1"
-                    >
-                        <div className="w-full h-full bg-green-500 rounded-full transform scale-x-110" />
-                    </motion.div>
-
-                    {/* Cheese */}
-                    <motion.div
-                        variants={layerVariants(0.1)}
-                        className="w-16 h-2 -mt-1 bg-yellow-400 rounded-sm relative z-20"
-                    >
-                        <div className="absolute right-3 top-1 w-2 h-2 bg-yellow-400 rounded-b-full" />
-                    </motion.div>
-
-                    {/* Patty */}
-                    <motion.div
-                        variants={layerVariants(0.15)}
-                        className="w-16 h-4 -mt-1 bg-amber-900 rounded-md relative z-10"
+                {/* 2. Realistic Image Container */}
+                <div className="absolute inset-2 top-2 bottom-[35%] rounded-3xl overflow-hidden bg-white shadow-sm ring-1 ring-orange-50">
+                    <motion.img
+                        src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80" // High-res juicy burger
+                        alt="Delicious Burger"
+                        className="w-full h-full object-cover"
+                        animate={{
+                            scale: isHovered ? 1.15 : 1.05, // Subtle zoom in on hover
+                        }}
+                        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                        loading="lazy"
                     />
 
-                    {/* Bottom Bun */}
-                    <motion.div
-                        variants={layerVariants(0.2)}
-                        className="w-16 h-4 -mt-1 bg-amber-200 rounded-b-xl shadow-md relative z-0"
-                        style={{ backgroundColor: '#F0BA65' }}
-                    />
+                    {/* Inner highlight overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 </div>
-            </motion.div>
 
-            {/* Label */}
-            <p className={`
-                text-center font-bold text-gray-700 mt-3
-                transition-all duration-300 ease-out
-                ${isHovered ? 'text-orange-600 transform -translate-y-0.5' : ''}
-            `}>
-                Burger
-            </p>
-        </div>
+                {/* 3. Trending Badge */}
+                <AnimatePresence>
+                    {isHovered && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.8 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 5, scale: 0.8 }}
+                            className="absolute -top-3 -right-3 px-3 py-1.5 rounded-full bg-orange-500 text-white text-[10px] font-bold uppercase tracking-wider shadow-lg flex items-center gap-1 z-20"
+                        >
+                            <TrendingUp size={12} />
+                            Trending
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* 4. Text Content */}
+                <div className="absolute bottom-0 left-0 right-0 p-5 pt-0 flex flex-col items-center justify-center h-[35%] text-center">
+                    <motion.h3
+                        className="text-lg font-black text-gray-800 leading-tight group-hover:text-orange-600 transition-colors duration-300"
+                        animate={{ y: isHovered ? -2 : 0 }}
+                    >
+                        Burger
+                    </motion.h3>
+
+                    <motion.p
+                        className="text-xs font-semibold text-gray-500 mt-1"
+                        animate={{ opacity: isHovered ? 1 : 0.7 }}
+                    >
+                        Juicy & Grilled
+                    </motion.p>
+                </div>
+
+                {/* 5. Glassmorphism Highlight */}
+                <div className="absolute inset-0 rounded-[2rem] ring-1 ring-white/60 pointer-events-none" />
+                <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/40 to-transparent rounded-t-[2rem] pointer-events-none" />
+
+            </motion.div>
+        </motion.div>
     );
 };
