@@ -193,9 +193,163 @@ canteenSchema.virtual('isTopRated').get(function () {
     return this.rating >= 4.3 && this.totalRatings >= 10;
 });
 
-// ... (Rest of Canteen Schema)
+export const Canteen = mongoose.model('Canteen', canteenSchema);
 
-// ...
+// =====================
+// MENU ITEM SCHEMA
+// =====================
+const menuItemSchema = new mongoose.Schema({
+    canteenId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Canteen',
+        required: [true, 'Canteen ID is required'],
+        index: true
+    },
+    name: {
+        type: String,
+        required: [true, 'Item name is required'],
+        trim: true,
+        minlength: [2, 'Name must be at least 2 characters'],
+        maxlength: [100, 'Name cannot exceed 100 characters']
+    },
+    description: {
+        type: String,
+        trim: true,
+        maxlength: [300, 'Description cannot exceed 300 characters']
+    },
+    price: {
+        type: Number,
+        required: [true, 'Price is required'],
+        min: [0, 'Price cannot be negative']
+    },
+    category: {
+        type: String,
+        required: [true, 'Category is required'],
+        trim: true,
+        index: true
+    },
+    image: {
+        type: String,
+        default: ''
+    },
+    isVeg: {
+        type: Boolean,
+        default: true
+    },
+    inStock: {
+        type: Boolean,
+        default: true
+    },
+    preparationTime: {
+        type: String,
+        default: '15-20 min'
+    },
+    rating: {
+        type: Number,
+        default: 4.0,
+        min: 0,
+        max: 5
+    },
+    totalOrders: {
+        type: Number,
+        default: 0
+    }
+}, {
+    timestamps: true
+});
+
+menuItemSchema.index({ canteenId: 1, category: 1 });
+menuItemSchema.index({ name: 'text', description: 'text' });
+
+export const MenuItem = mongoose.model('MenuItem', menuItemSchema);
+
+// =====================
+// ORDER SCHEMA
+// =====================
+const orderSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: [true, 'User ID is required'],
+        index: true
+    },
+    canteenId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Canteen',
+        required: [true, 'Canteen ID is required'],
+        index: true
+    },
+    items: [{
+        itemId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'MenuItem',
+            required: true
+        },
+        name: {
+            type: String,
+            required: true
+        },
+        price: {
+            type: Number,
+            required: true
+        },
+        quantity: {
+            type: Number,
+            required: true,
+            min: 1
+        }
+    }],
+    totalAmount: {
+        type: Number,
+        required: [true, 'Total amount is required'],
+        min: 0
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'],
+        default: 'pending',
+        index: true
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['pending', 'paid', 'failed', 'refunded'],
+        default: 'pending'
+    },
+    paymentMethod: {
+        type: String,
+        enum: ['cash', 'upi', 'card', 'wallet'],
+        default: 'cash'
+    },
+    specialInstructions: {
+        type: String,
+        maxlength: 500
+    },
+    estimatedTime: {
+        type: String,
+        default: '20-30 min'
+    },
+    completedAt: {
+        type: Date
+    },
+    cancelledAt: {
+        type: Date
+    },
+    cancelReason: {
+        type: String
+    },
+    isReviewed: {
+        type: Boolean,
+        default: false
+    }
+}, {
+    timestamps: true
+});
+
+orderSchema.index({ userId: 1, createdAt: -1 });
+orderSchema.index({ canteenId: 1, status: 1 });
+orderSchema.index({ createdAt: -1 });
+
+export const Order = mongoose.model('Order', orderSchema);
 
 // =====================
 // REVIEW SCHEMA
