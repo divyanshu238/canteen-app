@@ -16,6 +16,7 @@ import { Login } from './pages/Login';
 import { PartnerDashboard } from './pages/PartnerDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { Profile } from './pages/Profile';
+import { MyOrders } from './pages/MyOrders';
 import './index.css';
 
 // Protected Route Components
@@ -70,6 +71,12 @@ ReactDOM.createRoot(rootElement).render(
                             <Route path="/profile" element={
                                 <ProtectedRoute>
                                     <Profile />
+                                </ProtectedRoute>
+                            } />
+
+                            <Route path="/orders" element={
+                                <ProtectedRoute>
+                                    <MyOrders />
                                 </ProtectedRoute>
                             } />
 

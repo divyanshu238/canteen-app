@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../store';
 import type { RootState } from '../store';
-import { ShoppingBag, Search, MapPin, User, LogOut, ChevronDown, LayoutDashboard, Shield, X, Loader2, Lock, Menu } from 'lucide-react';
+import { ShoppingBag, Search, MapPin, User, LogOut, ChevronDown, LayoutDashboard, Shield, X, Loader2, Lock, Menu, ClipboardList } from 'lucide-react';
 import { searchAPI } from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -357,6 +357,18 @@ export const Navbar = () => {
                                                             <User size={16} />
                                                         </div>
                                                         Account Settings
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            navigate('/orders');
+                                                            setShowUserMenu(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-orange-50 hover:text-orange-700 rounded-xl flex items-center gap-3 transition-colors"
+                                                    >
+                                                        <div className="p-1.5 bg-gray-100 rounded-lg text-gray-500">
+                                                            <ClipboardList size={16} />
+                                                        </div>
+                                                        My Orders
                                                     </button>
                                                     <button
                                                         onClick={() => {
