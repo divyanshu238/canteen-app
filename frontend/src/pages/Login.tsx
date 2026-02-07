@@ -1,17 +1,18 @@
 /**
- * Login/Signup Page - Classic Email + Password Authentication
+ * Login/Signup Page - Premium Redesign
  * 
- * NO Firebase. NO OTP. NO third-party auth.
- * Simple email + password with backend validation.
- * 
- * SIGNUP: Name + Email + Phone + Password
- * LOGIN: Email + Password only
+ * Logic: Classic Email + Password Authentication (Preserved)
+ * UI: Modern, Glassmorphism, Split-screen, Animated
  */
 
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Mail, Lock, Phone, User, ArrowRight, ChefHat, GraduationCap, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import {
+    Mail, Lock, Phone, User, ArrowRight, ChefHat, GraduationCap,
+    AlertCircle, Eye, EyeOff, ShieldCheck
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { register, login } from '../services/auth.service';
 import { login as storeLogin } from '../store';
 import { LoginBackground } from '../components/LoginBackground';
@@ -138,257 +139,330 @@ export const Login = () => {
         setError('');
     };
 
+    // Animation Variants
+    const containerVariants = {
+        hidden: { opacity: 0 },
+        visible: {
+            opacity: 1,
+            transition: { duration: 0.6, ease: "easeOut" }
+        }
+    };
+
+    const cardVariants = {
+        hidden: { y: 30, opacity: 0, scale: 0.98 },
+        visible: {
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            transition: {
+                type: "spring",
+                stiffness: 100,
+                damping: 20,
+                delay: 0.1
+            }
+        }
+    };
+
     return (
-        <div className="min-h-screen flex">
-            {/* Left side - Branding */}
-            <div className="hidden lg:block lg:w-1/2 relative">
+        <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={containerVariants}
+            className="min-h-screen flex items-stretch overflow-hidden bg-gray-50 font-sans"
+        >
+            {/* Left side - Branding (Desktop) */}
+            <div className="hidden lg:block lg:w-1/2 relative overflow-hidden">
                 <LoginBackground>
-                    <div className="flex flex-col justify-between h-full">
+                    <div className="flex flex-col justify-between h-full relative z-20">
                         <div>
-                            <h1 className="text-4xl font-black text-white mb-2 drop-shadow-md">Canteen Connect</h1>
-                            <p className="text-orange-100 text-lg drop-shadow-sm">Campus food ordering made simple</p>
+                            <motion.div
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.3 }}
+                                className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md rounded-full px-4 py-1.5 border border-white/20 mb-6"
+                            >
+                                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                                <span className="text-white text-xs font-medium tracking-wide">Live Campus Service</span>
+                            </motion.div>
+
+                            <motion.h1
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 }}
+                                className="text-5xl font-black text-white mb-4 tracking-tight drop-shadow-sm"
+                            >
+                                Canteen Connect
+                            </motion.h1>
+                            <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.5 }}
+                                className="text-orange-50 text-xl font-medium max-w-md leading-relaxed"
+                            >
+                                Skip the queue. Order your favorite food from campus canteens in seconds.
+                            </motion.p>
                         </div>
 
-                        <div className="space-y-8 relative z-20">
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/30">
-                                    <Mail className="text-white" size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-bold text-lg drop-shadow-md">Simple Login</h3>
-                                    <p className="text-orange-50 font-medium drop-shadow-sm">Sign in with email and password</p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/30">
-                                    <GraduationCap className="text-white" size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-bold text-lg drop-shadow-md">For Students</h3>
-                                    <p className="text-orange-50 font-medium drop-shadow-sm">Order from campus canteens in seconds</p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center flex-shrink-0 border border-white/30">
-                                    <ChefHat className="text-white" size={24} />
-                                </div>
-                                <div>
-                                    <h3 className="text-white font-bold text-lg drop-shadow-md">For Partners</h3>
-                                    <p className="text-orange-50 font-medium drop-shadow-sm">Manage your canteen, receive orders instantly</p>
-                                </div>
-                            </div>
+                        <div className="space-y-6">
+                            {[
+                                { icon: GraduationCap, title: "Students", desc: "Fast pickup & exclusive deals" },
+                                { icon: ChefHat, title: "Partners", desc: "Manage orders effortlessly" }
+                            ].map((item, idx) => (
+                                <motion.div
+                                    key={idx}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: 0.6 + (idx * 0.1) }}
+                                    className="flex items-center gap-4 group"
+                                >
+                                    <div className="w-12 h-12 bg-white/10 group-hover:bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center flex-shrink-0 border border-white/20 transition-all duration-300">
+                                        <item.icon className="text-white" size={24} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-white font-bold text-lg">{item.title}</h3>
+                                        <p className="text-orange-100/80 text-sm">{item.desc}</p>
+                                    </div>
+                                </motion.div>
+                            ))}
                         </div>
 
-                        <p className="text-orange-200 text-sm relative z-20">
-                            © 2024 Canteen Connect. All rights reserved.
-                        </p>
+                        <div className="flex items-center justify-between text-orange-100/60 text-xs mt-8">
+                            <p>© 2024 Canteen Connect</p>
+                            <div className="flex gap-4">
+                                <span>Privacy</span>
+                                <span>Terms</span>
+                            </div>
+                        </div>
                     </div>
                 </LoginBackground>
             </div>
 
-            {/* Right side - Form */}
-            <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
-                <div className="w-full max-w-md">
-                    <div className="bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
+            {/* Right side - Login Card */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 lg:p-12 relative">
+                {/* Mobile Background Gradient */}
+                <div className="absolute inset-0 z-0 lg:hidden bg-gradient-to-br from-orange-50 via-white to-gray-50" />
+
+                <motion.div
+                    variants={cardVariants}
+                    className="w-full max-w-[440px] z-10"
+                >
+                    {/* Floating Card */}
+                    <div className="bg-white rounded-[2rem] shadow-2xl shadow-orange-500/10 border border-white p-6 sm:p-10 relative overflow-hidden backdrop-blur-xl">
+
+                        {/* Decorative background blobs within card */}
+                        <div className="absolute -top-20 -right-20 w-40 h-40 bg-orange-100 rounded-full blur-3xl opacity-50 pointer-events-none" />
+                        <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-amber-100 rounded-full blur-3xl opacity-50 pointer-events-none" />
+
                         {/* Header */}
-                        <div className="text-center mb-8">
-                            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <Mail className="text-orange-600" size={32} />
-                            </div>
-                            <h2 className="text-3xl font-black text-gray-900 mb-2">
-                                {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+                        <div className="text-center mb-8 relative">
+                            <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ type: "spring", delay: 0.3 }}
+                                className="w-16 h-16 bg-gradient-to-tr from-orange-500 to-amber-500 rounded-2xl shadow-lg shadow-orange-500/30 flex items-center justify-center mx-auto mb-6 transform rotate-3"
+                            >
+                                <ChefHat className="text-white" size={32} strokeWidth={2.5} />
+                            </motion.div>
+
+                            <h2 className="text-3xl font-black text-gray-900 mb-2 tracking-tight">
+                                {mode === 'login' ? 'Welcome back 👋' : 'Create Account'}
                             </h2>
-                            <p className="text-gray-500">
+                            <p className="text-gray-500 font-medium">
                                 {mode === 'login'
-                                    ? 'Sign in with your email and password'
+                                    ? 'Sign in to continue ordering'
                                     : 'Join the campus food revolution'
                                 }
                             </p>
                         </div>
 
-                        {/* Error Message */}
-                        {error && (
-                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm flex items-center gap-2">
-                                <AlertCircle size={18} />
-                                <span>{error}</span>
-                            </div>
-                        )}
+                        {/* Error Alert */}
+                        <AnimatePresence>
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, height: 0 }}
+                                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                    exit={{ opacity: 0, y: -10, height: 0 }}
+                                    className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm flex items-center gap-3 overflow-hidden shadow-sm"
+                                >
+                                    <div className="bg-red-100 p-1.5 rounded-full flex-shrink-0">
+                                        <AlertCircle size={16} className="text-red-600" />
+                                    </div>
+                                    <span className="font-medium">{error}</span>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Role Selection (Register only) */}
-                        {mode === 'register' && (
-                            <div className="mb-6">
-                                <label className="block text-sm font-bold text-gray-700 mb-3">
-                                    I am a...
-                                </label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setRole('student')}
-                                        className={`p-4 rounded-xl border-2 transition-all ${role === 'student'
-                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                            : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                    >
-                                        <GraduationCap className="mx-auto mb-2" size={24} />
-                                        <span className="font-bold block">Student</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setRole('partner')}
-                                        className={`p-4 rounded-xl border-2 transition-all ${role === 'partner'
-                                            ? 'border-orange-500 bg-orange-50 text-orange-600'
-                                            : 'border-gray-200 hover:border-gray-300'
-                                            }`}
-                                    >
-                                        <ChefHat className="mx-auto mb-2" size={24} />
-                                        <span className="font-bold block">Partner</span>
-                                    </button>
-                                </div>
-                            </div>
-                        )}
+                        <AnimatePresence>
+                            {mode === 'register' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="mb-6 overflow-hidden"
+                                >
+                                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                                        I am a...
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {(['student', 'partner'] as const).map((r) => (
+                                            <button
+                                                key={r}
+                                                type="button"
+                                                onClick={() => setRole(r)}
+                                                className={`p-4 rounded-2xl border transition-all duration-200 relative overflow-hidden group ${role === r
+                                                        ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-md shadow-orange-100'
+                                                        : 'border-gray-100 bg-gray-50 hover:bg-gray-100 text-gray-600'
+                                                    }`}
+                                            >
+                                                {role === r && (
+                                                    <motion.div
+                                                        layoutId="activeRole"
+                                                        className="absolute inset-0 border-2 border-orange-500 rounded-2xl"
+                                                    />
+                                                )}
+                                                <div className="relative z-10 flex flex-col items-center gap-2">
+                                                    {r === 'student' ? <GraduationCap size={24} /> : <ChefHat size={24} />}
+                                                    <span className="font-bold capitalize">{r}</span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Form */}
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {/* Name (Register only) */}
-                            {mode === 'register' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                                        Full Name <span className="text-red-500">*</span>
-                                    </label>
-                                    <div className="relative">
-                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {/* Inputs */}
+                            <div className="space-y-4">
+                                {mode === 'register' && (
+                                    <div className="relative group">
+                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={20} />
                                         <input
                                             type="text"
                                             value={name}
                                             onChange={e => setName(e.target.value)}
-                                            className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                            placeholder="John Doe"
-                                            required
+                                            className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium text-gray-800 placeholder:text-gray-400"
+                                            placeholder="Full Name"
+                                            required={mode === 'register'}
                                             minLength={2}
                                         />
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {/* Email */}
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">
-                                    Email <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                <div className="relative group">
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={20} />
                                     <input
                                         type="email"
                                         value={email}
                                         onChange={e => { setEmail(e.target.value); setError(''); }}
-                                        className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                        placeholder="you@example.com"
+                                        className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium text-gray-800 placeholder:text-gray-400"
+                                        placeholder="Email Address"
                                         required
                                     />
                                 </div>
-                            </div>
 
-                            {/* Phone Number (Register only) */}
-                            {mode === 'register' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                                        Phone Number <span className="text-red-500">*</span>
-                                    </label>
-                                    <div className="relative">
-                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                                            <span className="text-gray-600 font-medium">+91</span>
+                                {mode === 'register' && (
+                                    <div className="relative group">
+                                        <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                            <Phone className="text-gray-400 group-focus-within:text-orange-500 transition-colors" size={20} />
+                                            <span className="text-gray-400 font-medium text-sm">|</span>
                                         </div>
                                         <input
                                             type="tel"
                                             value={phone}
                                             onChange={handlePhoneChange}
-                                            className="w-full pl-16 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                            placeholder="9876543210"
-                                            required
+                                            className="w-full pl-14 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium text-gray-800 placeholder:text-gray-400"
+                                            placeholder="Phone Number"
+                                            required={mode === 'register'}
                                             maxLength={10}
-                                            pattern="[0-9]{10}"
                                         />
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                                        <Phone size={12} />
-                                        Phone number is stored for contact purposes
-                                    </p>
-                                </div>
-                            )}
+                                )}
 
-                            {/* Password */}
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">
-                                    Password <span className="text-red-500">*</span>
-                                </label>
-                                <div className="relative">
-                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                                <div className="relative group">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-orange-500 transition-colors" size={20} />
                                     <input
                                         type={showPassword ? 'text' : 'password'}
                                         value={password}
                                         onChange={e => { setPassword(e.target.value); setError(''); }}
-                                        className="w-full pl-12 pr-12 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-                                        placeholder="••••••••"
+                                        className="w-full pl-12 pr-12 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all font-medium text-gray-800 placeholder:text-gray-400"
+                                        placeholder="Password"
                                         required
                                         minLength={6}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
                                     >
                                         {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                     </button>
                                 </div>
-                                {mode === 'register' && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Minimum 6 characters
-                                    </p>
-                                )}
                             </div>
 
+                            {/* Forgot Password (Login Only) */}
+                            {mode === 'login' && (
+                                <div className="text-right">
+                                    <button type="button" className="text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors">
+                                        Forgot Password?
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Submit Button */}
-                            <button
+                            <motion.button
+                                whileHover={{ scale: 1.02, boxShadow: "0 10px 25px -5px rgba(249, 115, 22, 0.4)" }}
+                                whileTap={{ scale: 0.98 }}
                                 type="submit"
                                 disabled={isLoading}
-                                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-orange-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
                             >
                                 {isLoading ? (
-                                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                                 ) : (
                                     <>
-                                        {mode === 'login' ? 'Sign In' : 'Create Account'}
+                                        <span>{mode === 'login' ? 'Sign In' : 'Create Account'}</span>
                                         <ArrowRight size={20} />
                                     </>
                                 )}
-                            </button>
+                            </motion.button>
                         </form>
 
                         {/* Toggle Mode */}
-                        <div className="mt-6 text-center">
-                            <p className="text-gray-600">
-                                {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                        <div className="mt-8 text-center">
+                            <p className="text-gray-500 font-medium">
+                                {mode === 'login' ? "New to Canteen?" : 'Already have an account?'}
                                 <button
                                     type="button"
                                     onClick={handleModeToggle}
-                                    className="text-orange-600 font-bold hover:text-orange-700"
+                                    className="ml-2 text-orange-600 font-bold hover:text-orange-700 hover:underline transition-all"
                                 >
-                                    {mode === 'login' ? 'Sign Up' : 'Sign In'}
+                                    {mode === 'login' ? 'Create Account' : 'Sign In'}
                                 </button>
                             </p>
                         </div>
-
-                        {/* Security Notice */}
-                        <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
-                            <p className="text-xs text-gray-500 text-center">
-                                🔒 Your password is securely encrypted
-                            </p>
-                        </div>
                     </div>
-                </div>
+
+                    {/* Trust Signals */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 1 }}
+                        className="mt-8 flex items-center justify-center gap-6 text-gray-400 grayscale opacity-70"
+                    >
+                        <div className="flex items-center gap-1.5 text-xs font-medium">
+                            <ShieldCheck size={14} />
+                            <span>Secure SSL</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-medium">
+                            <GraduationCap size={14} />
+                            <span>Campus Verified</span>
+                        </div>
+                    </motion.div>
+                </motion.div>
             </div>
-        </div>
+        </motion.div>
     );
 };
