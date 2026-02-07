@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { canteenAPI } from '../api';
 import { Navbar } from '../components/Navbar';
-import { CategorySection } from '../components/CategoryCard';
+import { AntigravityCategorySection } from '../components/AntigravityCategorySection';
 import { HeroSection } from '../components/HeroSection';
 import { CanteenCard, CanteenCardSkeleton } from '../components/CanteenCard';
 import { useOrderHistory } from '../hooks/useOrderHistory';
@@ -58,7 +58,7 @@ export const Home = () => {
             <HeroSection />
 
             {/* PREMIUM CATEGORY SCROLLER */}
-            <CategorySection className="-mt-0 z-10 relative" />
+            <AntigravityCategorySection className="-mt-0 z-10 relative" />
 
             {/* TOP RATED SECTIONS - Loaded Lazily */}
             {/* Top Rated Snacks */}
